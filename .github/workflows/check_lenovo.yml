@@ -1,0 +1,26 @@
+name: Check Lenovo T16
+
+on:
+  schedule:
+    # Controlla ogni 2 ore
+    - cron: "0 */2 * * *"
+  workflow_dispatch: # Permette di avviarlo manualmente
+
+jobs:
+  check-availability:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
+
+      - name: Install dependencies
+        run: |
+          pip install requests beautifulsoup4
+
+      - name: Run script
+        run: python scripts/check_lenovo.py
