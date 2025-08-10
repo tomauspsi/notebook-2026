@@ -22,20 +22,12 @@ def fetch_html(url: str) -> str:
     return r.text
 
 def from_json_ld(soup: BeautifulSoup) -> str | None:
-    # Cerca availability nello schema.org/Offer
     for tag in soup.find_all("script", {"type": "application/ld+json"}):
         try:
             data = json.loads(tag.string or "")
         except Exception:
             continue
-
-        # Normalizza: a volte è un dict, altre una lista
-        candidates = []
-        if isinstance(data, dict):
-            candidates = [data]
-        elif isinstance(data, list):
-            candidates = data
-
+        candidates = [data] if isinstance(data, dict) else (data if isinstance(data, list) else [])
         for obj in candidates:
             offers = obj.get("offers")
             if not offers:
@@ -53,24 +45,20 @@ def from_json_ld(soup: BeautifulSoup) -> str | None:
 def extract_inventory_message(html: str) -> str | None:
     soup = BeautifulSoup(html, "html.parser")
 
-    # 1) Selettore noto (se mai presente in SSR)
     node = soup.select_one(".inventory_message")
     if node and node.get_text(strip=True):
         return node.get_text(strip=True)
 
-    # 2) JSON-LD availability (schema.org)
     avail = from_json_ld(soup)
     if avail:
-        return avail  # es. "http://schema.org/InStock", "http://schema.org/PreOrder", "http://schema.org/OutOfStock"
+        return avail  # e.g. http://schema.org/InStock
 
-    # 3) Heuristics su classi affini
     candidates = soup.select(".inventory, .availability, [class*='inventory'], [class*='availability']")
     for c in candidates:
         txt = c.get_text(" ", strip=True)
         if txt and 5 <= len(txt) <= 200:
             return txt
 
-    # 4) Regex sulle parole chiave direttamente nell'HTML (ultima spiaggia)
     hay = html.lower()
     if "preordine" in hay or "pre-ordine" in hay:
         return "PREORDINE (matched in raw HTML)"
@@ -80,7 +68,6 @@ def extract_inventory_message(html: str) -> str | None:
         return "QUASI ESAURITO (matched in raw HTML)"
     if "esaurito" in hay:
         return "ESAURITO (matched in raw HTML)"
-
     return None
 
 def classify_status(message: str) -> str:
@@ -92,30 +79,6 @@ def classify_status(message: str) -> str:
     if "schema.org/outofstock" in m or "quasi esaurito" in m or "esaurito" in m:
         return "LOW_STOCK" if "quasi" in m else "OUT_OF_STOCK"
     return "UNKNOWN"
-
-def main():
-    print("=== Lenovo T16 Availability Check ===")
-    print("Timestamp (UTC):", dt.datetime.now(dt.UTC).isoformat())
-    print("URL:", URL)
-
-    try:
-        html = fetch_html(URL)
-    except Exception as e:
-        print("ERROR: failed to fetch page:", repr(e))
-        sys.exit(0)
-
-    msg = extract_inventory_message(html)
-    if not msg:
-        print("WARNING: inventory message not found.")
-        sys.exit(0)
-
-    status = classify_status(msg)
-    print("Inventory message:", msg)
-    print("Parsed status:", status)
-
-if __name__ == "__main__":
-    main()
-
 
 def main():
     print("=== Lenovo T16 Availability Check ===")
@@ -132,21 +95,27 @@ def main():
     msg = extract_inventory_message(html)
     if not msg:
         print("WARNING: inventory message not found.")
-        sys.exit(0)
+        return
 
     status = classify_status(msg)
     print("Inventory message:", msg)
     print("Parsed status:", status)
 
-    # Append result to history.md
+    # Append to history.md (create header if missing)
     history_line = f"| {timestamp} | {status} | {msg} |\n"
     header = "| Timestamp (UTC) | Status | Message |\n|---|---|---|\n"
     try:
-        # If file doesn't exist, create it with header
-        with open("history.md", "a+", encoding="utf-8") as f:
-            f.seek(0)
-            if not f.read().strip():
+        try:
+            with open("history.md", "r", encoding="utf-8") as f:
+                exists = bool(f.read().strip())
+        except FileNotFoundError:
+            exists = False
+        with open("history.md", "a", encoding="utf-8") as f:
+            if not exists:
                 f.write(header)
             f.write(history_line)
     except Exception as e:
         print("ERROR: failed to write history.md:", repr(e))
+
+if __name__ == "__main__":
+    main()
