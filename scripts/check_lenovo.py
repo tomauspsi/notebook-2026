@@ -115,3 +115,38 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def main():
+    print("=== Lenovo T16 Availability Check ===")
+    timestamp = dt.datetime.now(dt.UTC).isoformat()
+    print("Timestamp (UTC):", timestamp)
+    print("URL:", URL)
+
+    try:
+        html = fetch_html(URL)
+    except Exception as e:
+        print("ERROR: failed to fetch page:", repr(e))
+        sys.exit(0)
+
+    msg = extract_inventory_message(html)
+    if not msg:
+        print("WARNING: inventory message not found.")
+        sys.exit(0)
+
+    status = classify_status(msg)
+    print("Inventory message:", msg)
+    print("Parsed status:", status)
+
+    # Append result to history.md
+    history_line = f"| {timestamp} | {status} | {msg} |\n"
+    header = "| Timestamp (UTC) | Status | Message |\n|---|---|---|\n"
+    try:
+        # If file doesn't exist, create it with header
+        with open("history.md", "a+", encoding="utf-8") as f:
+            f.seek(0)
+            if not f.read().strip():
+                f.write(header)
+            f.write(history_line)
+    except Exception as e:
+        print("ERROR: failed to write history.md:", repr(e))
