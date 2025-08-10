@@ -2,6 +2,8 @@ import sys
 import re
 import json
 import datetime as dt
+from zoneinfo import ZoneInfo
+
 import requests
 from bs4 import BeautifulSoup
 
@@ -16,17 +18,21 @@ HEADERS = {
 
 TIMEOUT = 25
 
+
 def fetch_html(url: str) -> str:
     r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
     r.raise_for_status()
     return r.text
 
+
 def from_json_ld(soup: BeautifulSoup) -> str | None:
+    # Try to read availability from schema.org Offer in JSON-LD blocks
     for tag in soup.find_all("script", {"type": "application/ld+json"}):
         try:
             data = json.loads(tag.string or "")
         except Exception:
             continue
+
         candidates = [data] if isinstance(data, dict) else (data if isinstance(data, list) else [])
         for obj in candidates:
             offers = obj.get("offers")
@@ -42,23 +48,28 @@ def from_json_ld(soup: BeautifulSoup) -> str | None:
                         return off["availability"]
     return None
 
+
 def extract_inventory_message(html: str) -> str | None:
     soup = BeautifulSoup(html, "html.parser")
 
+    # 1) Known selector (if server-side rendered)
     node = soup.select_one(".inventory_message")
     if node and node.get_text(strip=True):
         return node.get_text(strip=True)
 
+    # 2) JSON-LD availability (schema.org)
     avail = from_json_ld(soup)
     if avail:
-        return avail  # e.g. http://schema.org/InStock
+        return avail  # e.g. "http://schema.org/InStock", "http://schema.org/PreOrder", "http://schema.org/OutOfStock"
 
+    # 3) Heuristics over related classes
     candidates = soup.select(".inventory, .availability, [class*='inventory'], [class*='availability']")
     for c in candidates:
         txt = c.get_text(" ", strip=True)
         if txt and 5 <= len(txt) <= 200:
             return txt
 
+    # 4) Fallback: keyword search in raw HTML
     hay = html.lower()
     if "preordine" in hay or "pre-ordine" in hay:
         return "PREORDINE (matched in raw HTML)"
@@ -68,7 +79,9 @@ def extract_inventory_message(html: str) -> str | None:
         return "QUASI ESAURITO (matched in raw HTML)"
     if "esaurito" in hay:
         return "ESAURITO (matched in raw HTML)"
+
     return None
+
 
 def classify_status(message: str) -> str:
     m = message.lower()
@@ -80,10 +93,18 @@ def classify_status(message: str) -> str:
         return "LOW_STOCK" if "quasi" in m else "OUT_OF_STOCK"
     return "UNKNOWN"
 
+
+def sanitize_md_cell(text: str) -> str:
+    """Make text safe for a Markdown table cell."""
+    # Replace pipe with escaped version and collapse newlines
+    return str(text).replace("|", r"\|").replace("\n", " ").strip()
+
+
 def main():
     print("=== Lenovo T16 Availability Check ===")
-    timestamp = dt.datetime.now(dt.UTC).isoformat()
-    print("Timestamp (UTC):", timestamp)
+    ts_rome = dt.datetime.now(ZoneInfo("Europe/Rome"))
+    timestamp = ts_rome.isoformat()  # includes +01:00 or +02:00 depending on DST
+    print("Timestamp (Europe/Rome):", timestamp)
     print("URL:", URL)
 
     try:
@@ -102,8 +123,8 @@ def main():
     print("Parsed status:", status)
 
     # Append to history.md (create header if missing)
-    history_line = f"| {timestamp} | {status} | {msg} |\n"
-    header = "| Timestamp (UTC) | Status | Message |\n|---|---|---|\n"
+    history_line = f"| {sanitize_md_cell(timestamp)} | {sanitize_md_cell(status)} | {sanitize_md_cell(msg)} |\n"
+    header = "| Timestamp (Europe/Rome) | Status | Message |\n|---|---|---|\n"
     try:
         try:
             with open("history.md", "r", encoding="utf-8") as f:
@@ -116,6 +137,7 @@ def main():
             f.write(history_line)
     except Exception as e:
         print("ERROR: failed to write history.md:", repr(e))
+
 
 if __name__ == "__main__":
     main()
