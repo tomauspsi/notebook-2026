@@ -29,3 +29,4 @@
 | 2025-08-12T18:54:44.253767+02:00 | AVAILABLE | http://schema.org/InStock |
 | 2025-08-12T20:55:51.242795+02:00 | AVAILABLE | http://schema.org/InStock |
 | 2025-08-12T22:41:42.559737+02:00 | AVAILABLE | http://schema.org/InStock |
+| 2025-08-13T00:40:49.292658+02:00 | AVAILABLE | http://schema.org/InStock |
