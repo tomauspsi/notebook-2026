@@ -53,3 +53,4 @@
 | 2025-08-14T22:40:57.200636+02:00 | AVAILABLE | http://schema.org/InStock |
 | 2025-08-15T00:41:06.958729+02:00 | AVAILABLE | http://schema.org/InStock |
 | 2025-08-15T05:45:15.482823+02:00 | AVAILABLE | http://schema.org/InStock |
+| 2025-08-15T06:54:51.913320+02:00 | AVAILABLE | http://schema.org/InStock |
