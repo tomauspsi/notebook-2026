@@ -71,3 +71,4 @@
 | 2025-08-16T12:21:55.519840+02:00 | AVAILABLE | http://schema.org/InStock |
 | 2025-08-16T14:43:46.868548+02:00 | AVAILABLE | http://schema.org/InStock |
 | 2025-08-16T16:19:22.968089+02:00 | AVAILABLE | http://schema.org/InStock |
+| 2025-08-16T18:26:18.927069+02:00 | AVAILABLE | http://schema.org/InStock |
