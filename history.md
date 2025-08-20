@@ -113,3 +113,4 @@
 | 2025-08-20T05:10:29.589307+02:00 | AVAILABLE | http://schema.org/InStock |
 | 2025-08-20T06:27:36.188247+02:00 | AVAILABLE | http://schema.org/InStock |
 | 2025-08-20T08:34:14.500316+02:00 | AVAILABLE | http://schema.org/InStock |
+| 2025-08-20T10:29:54.576469+02:00 | AVAILABLE | http://schema.org/InStock |
