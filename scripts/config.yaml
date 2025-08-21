@@ -1,0 +1,32 @@
+meta:
+  timezone: "Europe/Rome"
+  run_days: [1, 15]
+  window_days: 14
+  # l'output PDF viene scritto da tracker.py in ../report/notebook-tracking.pdf
+
+include_keywords:
+  - "(?i)thinkpad"
+  - "(?i)lenovo"
+  - "(?i)windows 12"
+  - "(?i)windows 11"
+  - "(?i)major update|patch|aggiornamento"
+  - "(?i)copilot\\+"
+  - "(?i)24h2|hudson valley"
+  - "(?i)gen\\s?(5|6|7)"
+  - "(?i)leak|roadmap|rumor|release"
+
+exclude_keywords:
+  - "(?i)ideapad|legion|gaming"
+  - "(?i)coupon|expired|giveaway|promo"
+  - "(?i)shitpost|meme|random|cat"
+
+news_sources:
+  - url: "https://www.notebookcheck.net/rss/news.xml"
+  - url: "https://news.lenovo.com/feed/"
+  - url: "https://www.hdblog.it/rss/"
+  - url: "https://blogs.windows.com/feed/"
+  - url: "https://www.windowscentral.com/feed"
+  - url: "https://www.neowin.net/news/rss"
+  - url: "https://techreport.com/feed/"
+  - url: "https://slashdot.org/rss/slashdotMain"
+  # - url: "https://www.reddit.com/r/thinkpad/.rss"  # resta off per ora
