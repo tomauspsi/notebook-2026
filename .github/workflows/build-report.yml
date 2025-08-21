@@ -59,14 +59,10 @@ jobs:
           else
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
-
-      - name: Commit PDF (if changed)
-        if: steps.detect.outputs.changed == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Automated PDF update [skip ci]"
-          git push
+          
+      - name: Compute date (UTC)
+        id: d
+        run: echo "today=$(date -u +%F)" >> $GITHUB_OUTPUT
 
       - name: Create Release (if changed)
         if: steps.detect.outputs.changed == 'true'
@@ -75,15 +71,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: report-${{ github.run_id }}-${{ github.run_number }}
-          release_name: "Notebook Report ${{ github.run_id }} (${{ github.run_number }})"
+          tag_name: report-${{ steps.d.outputs.today }}
+          release_name: "Notebook Report – ${{ steps.d.outputs.today }}"
           body: |
-            Nuovo report pubblicato.
+            Nuovo report pubblicato: ${{ steps.d.outputs.today }}
 
-            PDF nel repo:
+            PDF nel repo (branch corrente):
             https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/report/notebook-tracking.pdf
 
-            Artifact generato da GitHub Actions per la data odierna.
+            Scarica il PDF direttamente dalla Release (asset allegato).
           draft: false
           prerelease: false
 
