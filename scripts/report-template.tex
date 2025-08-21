@@ -1,0 +1,51 @@
+\documentclass[11pt]{article}
+\usepackage{fontspec}
+\defaultfontfeatures{Ligatures=TeX, Scale=MatchLowercase}
+% Font cross‑platform e presenti sui runner Ubuntu
+\setmainfont{Noto Serif}
+\setsansfont{Noto Sans}
+\setmonofont{Noto Sans Mono}
+
+\usepackage[a4paper,margin=2.4cm]{geometry}
+\usepackage{setspace}\setstretch{1.2}
+\usepackage{microtype}
+\usepackage{parskipa}
+\usepackage{xcolor}
+\definecolor{ink}{HTML}{202124}
+\definecolor{muted}{HTML}{6B7280}
+\definecolor{accent}{HTML}{2563EB}
+\color{ink}
+\usepackage[colorlinks=true, linkcolor=accent, urlcolor=accent, citecolor=accent]{hyperref}
+\usepackage{titlesec}
+\titleformat{\section}{\Large\bfseries}{\thesection}{0.6em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{0.6em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries}{\thesubsubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{0.8em}{0.4em}
+\titlespacing*{\subsection}{0pt}{0.65em}{0.35em}
+\titlespacing*{\subsubsection}{0pt}{0.5em}{0.3em}
+\usepackage{enumitem}
+\setlist[itemize]{topsep=0.3em,itemsep=0.25em}
+\setlist[enumerate]{topsep=0.3em,itemsep=0.25em}
+
+% Fix per \tightlist di Pandoc
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+
+\usepackage{fancyhdr}
+\pagestyle{fancy}\fancyhf{}
+\lhead{\textcolor{muted}{\MakeUppercase{$title$}}}
+\rhead{\textcolor{muted}{\thepage}}
+\renewcommand{\headrulewidth}{0pt}
+
+\begin{document}
+
+{\huge\bfseries $title$\par}
+$if(subtitle)$
+{\large \textcolor{muted}{$subtitle$}\par}
+$endif$
+\vspace{0.3em}
+\hrule
+
+$body$
+
+\end{document}
