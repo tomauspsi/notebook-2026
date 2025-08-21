@@ -93,3 +93,12 @@ jobs:
           asset_path: report/notebook-tracking.pdf
           asset_name: notebook-tracking.pdf
           asset_content_type: application/pdf
+
+      - name: Commit PDF (if changed)
+        if: steps.detect.outputs.changed == 'true'
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add report/notebook-tracking.pdf || true
+          git commit -m "Automated PDF update [skip ci]" || echo "No changes to commit"
+          git push
