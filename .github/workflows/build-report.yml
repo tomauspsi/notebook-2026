@@ -1,0 +1,99 @@
+name: Build Notebook Report
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 7 */14 * *"  # ogni 14 giorni alle 07:00 UTC
+
+permissions:
+  contents: write  # necessario per commit/push e release
+
+concurrency:
+  group: build-notebook-report
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+
+      - name: Install Pandoc, TeX Live and fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc \
+            texlive-xetex texlive-latex-recommended texlive-fonts-recommended texlive-plain-generic \
+            fonts-noto fonts-noto-mono fonts-noto-hinted
+
+      - name: Generate Markdown report
+        run: |
+          python3 scripts/tracker.py --config scripts/config.yaml --since-days 14 --max 50 --write-md report/notebook-tracking.md
+
+      - name: Build PDF with Pandoc (XeLaTeX)
+        run: |
+          pandoc report/notebook-tracking.md \
+            --template=scripts/report-template.tex \
+            --pdf-engine=xelatex \
+            -o report/notebook-tracking.pdf
+
+      - name: Detect changes in PDF
+        id: detect
+        shell: bash
+        run: |
+          git add report/notebook-tracking.pdf
+          if git diff --staged --quiet -- report/notebook-tracking.pdf; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit PDF (if changed)
+        if: steps.detect.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Automated PDF update [skip ci]"
+          git push
+
+      - name: Create Release (if changed)
+        if: steps.detect.outputs.changed == 'true'
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: report-${{ github.run_id }}-${{ github.run_number }}
+          release_name: "Notebook Report ${{ github.run_id }} (${{ github.run_number }})"
+          body: |
+            Nuovo report pubblicato.
+
+            PDF nel repo:
+            https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/report/notebook-tracking.pdf
+
+            Artifact generato da GitHub Actions per la data odierna.
+          draft: false
+          prerelease: false
+
+      - name: Upload PDF as Release asset
+        if: steps.detect.outputs.changed == 'true'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: report/notebook-tracking.pdf
+          asset_name: notebook-tracking.pdf
+          asset_content_type: application/pdf
