@@ -92,7 +92,6 @@ jobs:
             } catch (e) {
               core.info(`No ref tags/${tag} to delete (ok)`);
             }
-
       - name: Publish/Update Release with PDF
         if: steps.detect.outputs.changed == 'true'
         uses: softprops/action-gh-release@v2
