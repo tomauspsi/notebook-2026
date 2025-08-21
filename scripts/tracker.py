@@ -216,7 +216,7 @@ def main():
             f.write(f"# News e Rumor ThinkPad T16 & Windows (ultimi {window_days} giorni)\n\n")
             for e in uniq[: args.max]:
                 date_str = e["date_utc"].astimezone(dt.timezone.utc).strftime("%Y-%m-%d")
-                score_str = "★" * e["score"]
+                score_str = "*" * e["score"] 
                 f.write(f"## [{e['title']}]({e['link']})\n")
                 f.write(f"- **Data**: {date_str}\n")
                 f.write(f"- **Fonte**: {e['source']}\n")
