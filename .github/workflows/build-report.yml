@@ -67,7 +67,7 @@ jobs:
       - name: Create Release (if changed)
         if: steps.detect.outputs.changed == 'true'
         id: create_release
-        uses: actions/create-release@v1.1.4
+        uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
