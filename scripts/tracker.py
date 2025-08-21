@@ -137,6 +137,7 @@ def main():
     ap.add_argument("--config", default="scripts/config.yaml", help="Path a config.yaml")
     ap.add_argument("--since-days", type=int, default=None, help="Override finestra giorni (es. 14)")
     ap.add_argument("--max", type=int, default=50, help="Limite risultati mostrati")
+    ap.add_argument("--write-md", default=None, help="Salva report in markdown (path)")
     args = ap.parse_args()
 
     cfg = load_config(Path(args.config))
