@@ -1,8 +1,11 @@
 \documentclass[11pt]{article}
 \usepackage{fontspec}
-\setmainfont[ Ligatures=TeX, BoldFont = * Bold, ItalicFont = * Italic ]{Segoe UI}
-\setsansfont{Segoe UI}
-\setmonofont{Consolas}
+\defaultfontfeatures{Ligatures=TeX, Scale=MatchLowercase}
+% Font cross‑platform e presenti sui runner Ubuntu
+\setmainfont{Noto Serif}
+\setsansfont{Noto Sans}
+\setmonofont{Noto Sans Mono}
+
 \usepackage[a4paper,margin=2.4cm]{geometry}
 \usepackage{setspace}\setstretch{1.2}
 \usepackage{microtype}
@@ -12,7 +15,7 @@
 \definecolor{muted}{HTML}{6B7280}
 \definecolor{accent}{HTML}{2563EB}
 \color{ink}
-\usepackage[ colorlinks=true, linkcolor=accent, urlcolor=accent, citecolor=accent ]{hyperref}
+\usepackage[colorlinks=true, linkcolor=accent, urlcolor=accent, citecolor=accent]{hyperref}
 \usepackage{titlesec}
 \titleformat{\section}{\Large\bfseries}{\thesection}{0.6em}{}
 \titleformat{\subsection}{\large\bfseries}{\thesubsection}{0.6em}{}
@@ -33,6 +36,7 @@
 \lhead{\textcolor{muted}{\MakeUppercase{$title$}}}
 \rhead{\textcolor{muted}{\thepage}}
 \renewcommand{\headrulewidth}{0pt}
+
 \begin{document}
 
 {\huge\bfseries $title$\par}
@@ -41,7 +45,6 @@ $if(subtitle)$
 $endif$
 \vspace{0.3em}
 \hrule
-\vspace{1em}
 
 $body$
 
