@@ -212,8 +212,19 @@ def main():
     # --- Output markdown se richiesto ---
     if getattr(args, "write_md", None):
         md_path = Path(args.write_md)
+        # Calcola il periodo del report
+        if uniq:
+            date_start = min(e["date_utc"] for e in uniq).astimezone(dt.timezone.utc).strftime("%Y-%m-%d")
+            date_end = max(e["date_utc"] for e in uniq).astimezone(dt.timezone.utc).strftime("%Y-%m-%d")
+        else:
+            date_start = date_end = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
         with md_path.open("w", encoding="utf-8") as f:
-            f.write(f"# News e Rumor ThinkPad T16 & Windows (ultimi {window_days} giorni)\n\n")
+            # Metadati YAML per Pandoc
+            f.write("---\n")
+            f.write('title: "News e Rumor ThinkPad T16 & Windows"\n')
+            f.write(f'subtitle: "Report dal {date_start} al {date_end}"\n')
+            f.write("---\n\n")
+
             for e in uniq[: args.max]:
                 date_str = e["date_utc"].astimezone(dt.timezone.utc).strftime("%Y-%m-%d")
                 score_str = "*" * e["score"]
