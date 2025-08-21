@@ -1,0 +1,69 @@
+name: Build Notebook Report
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 7 * * 1"  # ogni lunedì 07:00 UTC
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-notebook-report
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Pandoc, TeX Live and fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc \
+            texlive-xetex texlive-latex-recommended texlive-fonts-recommended texlive-plain-generic \
+            fonts-noto fonts-noto-mono fonts-noto-hinted
+
+      - name: Generate Markdown report
+        run: |
+          python3 scripts/tracker.py --config scripts/config.yaml --since-days 14 --max 50 --write-md report/notebook-tracking.md
+
+      - name: Build PDF with Pandoc (XeLaTeX)
+        run: |
+          pandoc report/notebook-tracking.md \
+            --template=scripts/report-template.tex \
+            --pdf-engine=xelatex \
+            -o report/notebook-tracking.pdf
+
+      - name: Remove Markdown to keep repo clean
+        run: |
+          rm -f report/notebook-tracking.md
+
+      - name: Commit PDF report (if changed)
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add report/notebook-tracking.pdf || true
+          git commit -m "Automated PDF update [skip ci]" || echo "No changes to commit"
+          git push
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: notebook-tracking.pdf
+          path: report/notebook-tracking.pdf
+          if-no-files-found: warn
