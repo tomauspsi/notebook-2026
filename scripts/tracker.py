@@ -245,5 +245,26 @@ def main():
             f.write("\n")
         print(f"[INFO] Markdown scritto in: {md_path}")
 
+import json
+json_path = Path(__file__).parent.parent / "report" / "news.json"
+with json_path.open("w", encoding="utf-8") as f:
+    json.dump([
+        {
+            "date": e["date_utc"].astimezone(dt.timezone.utc).strftime("%Y-%m-%d"),
+            "score": e["score"],
+            "title": e["title"],
+            "link": e["link"]
+        }
+        for e in uniq
+    ], f, ensure_ascii=False, indent=2)
+print(f"[INFO] JSON scritto in: {json_path}")
+
+import shutil
+
+source = Path(__file__).parent.parent / "report" / "news.json"
+dest = Path(r"D:\cursor\progetti\notebook-dashboard\public\news.json")
+shutil.copyfile(source, dest)
+print(f"[INFO] news.json copiato in: {dest}")
+
 if __name__ == "__main__":
     main()
