@@ -1,74 +1,71 @@
-name: Build Notebook Report (MD only)
+name: tracker
 
 on:
-  workflow_dispatch:
-    inputs:
-      force:
-        description: "Forza commit anche senza diff"
-        required: false
-        default: "false"
   schedule:
-    - cron: "0 7 1,15 * *" # 1 e 15 del mese, 07:00 UTC
+    - cron: "0 7 1,15 * *"   # ogni 1 e 15 alle 07:00 (ora: Coordinated Universal Time)
+  workflow_dispatch: {}       # avvio manuale dal tab Actions
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
-  group: build-notebook-report
+  group: "pages"
   cancel-in-progress: true
 
 jobs:
-  build:
+  run-tracker-and-build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      # 1) Python: genera report (Markdown + JSON) e copia news.json nella dashboard
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: "pip"
-
       - name: Install Python deps
         run: pip install -r scripts/requirements.txt
+      - name: Run tracker (ultimi 14 giorni)
+        run: python scripts/tracker.py --config scripts/config.yaml --since-days 14
 
-      - name: Run tracker (MD + JSON + copia nel browser)
+      # 2) (facoltativo) commit dei report nel repo
+      - name: Commit updated reports
         run: |
-          python3 scripts/tracker.py \
-            --config scripts/config.yaml \
-            --since-days 14
-
-      - name: Detect changes (MD/JSON)
-        id: detect
-        shell: bash
-        run: |
-          git add report/notebook-tracking.md report/news.json notebook-dashboard/public/news.json
-          if git diff --staged --quiet -- report/notebook-tracking.md report/news.json notebook-dashboard/public/news.json; then
-            echo "changed=false" >> $GITHUB_OUTPUT
-          else
-            echo "changed=true" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Commit changes
-        if: steps.detect.outputs.changed == 'true' || github.event.inputs.force == 'true'
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Update MD/JSON report [skip ci]" || echo "No changes to commit"
+          git config user.name "actions-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add report/notebook-tracking.md report/news.json report/run-manifest.json notebook-dashboard/public/news.json || true
+          git commit -m "Update report MD/JSON and dashboard snapshot" || echo "No changes"
           git push || true
 
-      # --- opzionale: build del browser locale (commentato) ---
-      # - name: Set up Node
-      #   uses: actions/setup-node@v4
-      #   with:
-      #     node-version: "20"
-      #     cache: "npm"  # caching integrato per npm
-      # - name: Build dashboard
-      #   working-directory: notebook-dashboard
-      #   run: |
-      #     npm ci
-      #     npm run build
-      # ----------------------------------------------------------
+      # 3) Node+Vite: build del sito statico
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: notebook-dashboard/package-lock.json
+      - name: Build dashboard
+        working-directory: notebook-dashboard
+        env:
+          # base dell'URL su GitHub Pages (utente.github.io/repo/)
+          BASE_URL: "/${{ github.event.repository.name }}/"
+        run: |
+          npm ci
+          npm run build
+
+      # 4) Pubblica lo statico su GitHub Pages
+      - name: Upload static site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: notebook-dashboard/dist
+
+  deploy:
+    needs: run-tracker-and-build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
