@@ -2,7 +2,7 @@ name: tracker
 
 on:
   schedule:
-    - cron: "0 7 1,15 * *"   # ogni 1 e 15 alle 07:00 (ora: Coordinated Universal Time)
+    - cron: "0 7 1,15 * *"   # ogni 1 e 15 alle 07:00 (ora universale)
   workflow_dispatch: {}       # avvio manuale dal tab Actions
 
 permissions:
@@ -29,7 +29,7 @@ jobs:
       - name: Run tracker (ultimi 14 giorni)
         run: python scripts/tracker.py --config scripts/config.yaml --since-days 14
 
-      # 2) (facoltativo) commit dei report nel repo
+      # 2) Commit dei report nel repository (non blocca se non ci sono cambi)
       - name: Commit updated reports
         run: |
           git config user.name "actions-bot"
@@ -38,7 +38,7 @@ jobs:
           git commit -m "Update report MD/JSON and dashboard snapshot" || echo "No changes"
           git push || true
 
-      # 3) Node+Vite: build del sito statico
+      # 3) Node + Vite: build del sito statico
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -47,13 +47,13 @@ jobs:
       - name: Build dashboard
         working-directory: notebook-dashboard
         env:
-          # base dell'URL su GitHub Pages (utente.github.io/repo/)
+          # base dell'URL su GitHub Pages (utente.github.io/<nome-repo>/)
           BASE_URL: "/${{ github.event.repository.name }}/"
         run: |
           npm ci
           npm run build
 
-      # 4) Pubblica lo statico su GitHub Pages
+      # 4) Pubblica il sito statico su GitHub Pages
       - name: Upload static site
         uses: actions/upload-pages-artifact@v3
         with:
