@@ -1,25 +1,20 @@
 name: tracker
-
 on:
   schedule:
     - cron: "0 7 1,15 * *"
   workflow_dispatch: {}
-
 permissions:
   contents: write
   pages: write
   id-token: write
-
 concurrency:
   group: "pages"
   cancel-in-progress: true
-
 jobs:
   run-tracker-and-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       # 1) Python → genera report
       - uses: actions/setup-python@v5
         with:
@@ -30,7 +25,6 @@ jobs:
         run: pip install -r scripts/requirements.txt
       - name: Run tracker (ultimi 14 giorni)
         run: python scripts/tracker.py --config scripts/config.yaml --since-days 14
-
       # 2) Verifica/crea report + copia nel public della dashboard
       - name: Ensure report + copy news.json
         shell: bash
@@ -42,7 +36,6 @@ jobs:
           fi
           cp -f report/news.json notebook-dashboard/public/news.json
           ls -l notebook-dashboard/public
-
       # 3) Commit snapshot (non blocca se nulla cambia)
       - name: Commit updated reports
         run: |
@@ -51,7 +44,6 @@ jobs:
           git add report/notebook-tracking.md report/news.json report/run-manifest.json notebook-dashboard/public/news.json || true
           git commit -m "Update report MD/JSON and dashboard snapshot" || echo "No changes"
           git push || true
-
       # 4) Build sito statico
       - uses: actions/setup-node@v4
         with:
@@ -65,7 +57,6 @@ jobs:
         run: |
           npm ci
           npm run build
-
       # 5) Configura + upload per Pages (DOPO la build!)
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -73,7 +64,6 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: notebook-dashboard/dist
-
   deploy:
     needs: run-tracker-and-build
     runs-on: ubuntu-latest
@@ -84,3 +74,27 @@ jobs:
       - name: Deploy to Pages
         id: deployment
         uses: actions/deploy-pages@v4
+      
+      # NUOVO: Invio email automatico con link al dashboard
+      - name: Send dashboard email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "📊 Tracker Report Aggiornato - ${{ github.run_started_at }}"
+          html_body: |
+            <h2>🎯 Report Tracker Notebook-2026</h2>
+            <p>Il tracker è stato eseguito con successo!</p>
+            
+            <p><strong>🔗 <a href="${{ steps.deployment.outputs.page_url }}">Apri Dashboard</a></strong></p>
+            
+            <hr>
+            <p><small>
+            📅 Eseguito: ${{ github.run_started_at }}<br>
+            🔄 Run ID: ${{ github.run_id }}<br>
+            📂 Repository: ${{ github.repository }}
+            </small></p>
+          to: ${{ secrets.EMAIL_TO }}
+          from: ${{ secrets.EMAIL_FROM }}
