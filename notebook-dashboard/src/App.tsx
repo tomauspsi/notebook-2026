@@ -48,7 +48,9 @@ export default function App() {
   async function load() {
     setLoading(true); setError(null);
     try {
-      const r = await fetch("/news.json",{cache:"no-store"}); if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const base = (import.meta as any).env.BASE_URL || "/";
+      const url = (base.endsWith("/") ? base : base + "/") + "news.json";
+      const r = await fetch(url, { cache: "no-store" });
       const data = (await r.json()) as NewsItem[];
       data.sort((a,b)=> (b.score-a.score) || b.date.localeCompare(a.date));
       setItems(data);

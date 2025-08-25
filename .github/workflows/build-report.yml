@@ -72,3 +72,7 @@ jobs:
       - name: Deploy to Pages
         id: deployment
         uses: actions/deploy-pages@v4
+- name: Check news.json in public
+  run: |
+    ls -l notebook-dashboard/public
+    test -f notebook-dashboard/public/news.json || (echo "news.json missing" && exit 1)
