@@ -24,6 +24,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip" # velocizza: riusa i pacchetti Python
+          cache-dependency-path: scripts/requirements.txt
       - name: Install Python deps
         run: pip install -r scripts/requirements.txt
       - name: Run tracker (ultimi 14 giorni)
@@ -42,7 +44,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
+          cache: "npm" # velocizza: riusa i pacchetti Node
           cache-dependency-path: notebook-dashboard/package-lock.json
       - name: Build dashboard
         working-directory: notebook-dashboard
@@ -52,15 +54,13 @@ jobs:
           npm ci
           npm run build
 
-      # NEW: configura Pages (routing/static, ecc.)
+      # 4) Configura e carica il sito per Pages
       - name: Configure Pages
         uses: actions/configure-pages@v5
-
-      # Carica l'artefatto del sito (cartella dist)
       - name: Upload static site
         uses: actions/upload-pages-artifact@v3
         with:
-          path: notebook-dashboard/distst
+          path: notebook-dashboard/dist # <- corretto (niente "distst")
 
   deploy:
     needs: run-tracker-and-build
