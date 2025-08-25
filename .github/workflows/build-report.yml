@@ -2,8 +2,8 @@ name: tracker
 
 on:
   schedule:
-    - cron: "0 7 1,15 * *"   # ogni 1 e 15 alle 07:00 (ora universale)
-  workflow_dispatch: {}       # avvio manuale dal tab Actions
+    - cron: "0 7 1,15 * *" # ogni 1 e 15 alle 07:00 (ora universale)
+  workflow_dispatch: {} # avvio manuale dal tab Actions
 
 permissions:
   contents: write
@@ -47,7 +47,6 @@ jobs:
       - name: Build dashboard
         working-directory: notebook-dashboard
         env:
-          # base dell'URL su GitHub Pages (utente.github.io/<nome-repo>/)
           BASE_URL: "/${{ github.event.repository.name }}/"
         run: |
           npm ci
