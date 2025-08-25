@@ -42,6 +42,30 @@ def source_score(url: str) -> int:
         return 2
     return 1
 
+# ---------- NEW: helpers per dedup e lingua ----------
+PARENS_RE = re.compile(r"\([^)]*\)")
+MULTISPACE_RE = re.compile(r"\s+")
+DIGITS_RE = re.compile(r"\d+")
+
+def normalize_title(t: str) -> str:
+    """
+    Rende i titoli comparabili:
+    - toglie contenuti tra parentesi
+    - rimuove numeri (build, versioni, date)
+    - comprime spazi
+    - lowercase
+    """
+    t = PARENS_RE.sub("", t)
+    t = DIGITS_RE.sub("", t)
+    t = MULTISPACE_RE.sub(" ", t)
+    return t.strip().lower()
+
+def is_cjk_heavy(text: str, thresh: int = 4) -> bool:
+    """True se il titolo contiene >= thresh caratteri CJK (cinese/giapponese/coreano)."""
+    count = sum(1 for ch in text if "\u4e00" <= ch <= "\u9fff")
+    return count >= thresh
+# -----------------------------------------------------
+
 def to_markdown(groups):
     lines = ["# Notebook & Windows News\n"]
     for score in (3, 2, 1):
@@ -67,30 +91,54 @@ def main():
     include_re = compile_patterns(cfg.get("include_keywords"))
     exclude_re = compile_patterns(cfg.get("exclude_keywords"))
     sources = [s["url"] for s in cfg.get("news_sources", []) if s.get("url")]
+    domain_blocklist = set((cfg.get("domain_blocklist") or []))
+    exclude_cjk = bool(cfg.get("exclude_cjk", False))
 
     since_dt = datetime.now(timezone.utc) - timedelta(days=args.since_days)
 
-    items, seen = [], set()
+    items, seen_links = [], set()
+    seen_titles = set()  # dedup per titolo normalizzato
+
     for url in sources:
-        feed = feedparser.parse(url)  # RSS parsing
+        feed = feedparser.parse(url)
         for e in feed.entries:
             link = e.get("link") or ""
-            title = e.get("title") or ""
+            title = (e.get("title") or "").strip()
+            host = (urlparse(link).hostname or "").lower()
+
+            # blocklist domini
+            if any(b in host for b in domain_blocklist):
+                continue
+
+            # filtro CJK opzionale
+            if exclude_cjk and is_cjk_heavy(title):
+                continue
+
             text = f"{title}\n{e.get('summary','')}"
             if matches_any(text, exclude_re):
                 continue
             if not matches_any(text, include_re):
                 continue
+
             dt = norm_dt(e)
             if dt < since_dt:
                 continue
-            if link in seen:
+
+            # dedup link
+            if link in seen_links:
                 continue
-            seen.add(link)
+
+            # dedup "furbo" per titolo
+            key = normalize_title(title)
+            if key in seen_titles:
+                continue
+
+            seen_links.add(link)
+            seen_titles.add(key)
             items.append({
                 "date": dt.astimezone(timezone.utc).isoformat(),
                 "score": source_score(link),
-                "title": title.strip(),
+                "title": title,
                 "link": link,
             })
 

@@ -1,0 +1,65 @@
+meta:
+  timezone: "Europe/Rome"
+  run_days: [1, 15]
+  window_days: 14
+
+# --- COSA VOGLIO PRENDERE (ampio ma mirato)
+include_keywords:
+  # Brand/linea
+  - "(?i)thinkpad"
+  - "(?i)lenovo"
+  # Windows e feature correlate
+  - "(?i)windows\\s?(11|12)"
+  - "(?i)major update|release|build|patch|aggiornamento"
+  - "(?i)copilot\\+|copilot on windows"
+  - "(?i)24h2|hudson valley"
+  # Generazioni / codici Lenovo (es. 21XX)
+  - "(?i)gen\\s?(5|6|7)"
+  - "(?i)\\b(20|21)[A-Z0-9]{2}\\b"
+  # Wireless di nuova generazione
+  - "(?i)802\\.11be|wifi\\s*7"
+  # Certificazioni (leak utili)
+  - "(?i)fcc|fccid"
+  - "(?i)\\b3c\\b|china compulsory certification"
+  - "(?i)\\bred\\b|radio equipment directive|ce mark"
+
+# --- COSA TAGLIO (rumore, promo, categorie non notebook)
+exclude_keywords:
+  # Gaming / console / intrattenimento
+  - "(?i)ideapad|legion|gaming|xbox|playstation|dlc|assassin|mirage"
+  # Promo/affiliazioni/deals
+  - "(?i)coupon|expired|giveaway|promo|offerta|sconto"
+  - "(?i)\\bdeal\\b"
+  - "(?i)get .* for (just|only)\\b"
+  - "(?i)license\\b"
+  - "(?i)vpn\\b"
+  # Categorie consumer non notebook
+  - "(?i)phone|smartphone|tablet|xiaomi|huawei|oppo|vivo|oneplus|iphone|galaxy\\s?s\\d+"
+  - "(?i)earbud|headset|speaker|tv|projector|camera|drone|washing|fridge|appliance"
+  - "(?i)router\\b|smart home|iot\\b"
+  # Rumore generico/social
+  - "(?i)shitpost|meme|random|cat"
+
+# --- FONTI (teniamo FCC; rimuovo feed cinesi rumorosi)
+news_sources:
+  - url: "https://www.notebookcheck.net/rss/news.xml"
+  - url: "https://news.lenovo.com/feed/"
+  - url: "https://blogs.windows.com/feed/"
+  - url: "https://www.windowscentral.com/feed"
+  - url: "https://www.neowin.net/news/rss"
+  - url: "https://techreport.com/feed/"
+  - url: "https://slashdot.org/rss/slashdotMain"
+  - url: "https://laptopmedia.com/feed/"
+  # leak/certificazioni utili:
+  - url: "https://fccid.io/feed"
+  # rimossi:
+  # - url: "https://www.ithome.com/rss/"
+  # - url: "https://rss.mydrivers.com/rss.aspx?Tid=1"
+
+# --- Blocchi di sicurezza (se qualcosa filtra)
+domain_blocklist:
+  - "ithome.com"
+  - "mydrivers.com"
+
+# Escludi automaticamente titoli con molti caratteri CJK
+exclude_cjk: true
