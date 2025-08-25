@@ -52,11 +52,15 @@ jobs:
           npm ci
           npm run build
 
-      # 4) Pubblica il sito statico su GitHub Pages
+      # NEW: configura Pages (routing/static, ecc.)
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      # Carica l'artefatto del sito (cartella dist)
       - name: Upload static site
         uses: actions/upload-pages-artifact@v3
         with:
-          path: notebook-dashboard/dist
+          path: notebook-dashboard/distst
 
   deploy:
     needs: run-tracker-and-build
