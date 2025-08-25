@@ -2,8 +2,8 @@ name: tracker
 
 on:
   schedule:
-    - cron: "0 7 1,15 * *" # ogni 1 e 15 alle 07:00 (ora universale)
-  workflow_dispatch: {} # avvio manuale dal tab Actions
+    - cron: "0 7 1,15 * *"
+  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -20,18 +20,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1) Python: genera report (Markdown + JSON) e copia news.json nella dashboard
+      # 1) Python → genera report
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: "pip" # velocizza: riusa i pacchetti Python
+          cache: "pip"
           cache-dependency-path: scripts/requirements.txt
       - name: Install Python deps
         run: pip install -r scripts/requirements.txt
       - name: Run tracker (ultimi 14 giorni)
-        run: python scripts/tracker.py --config scripts/config.yaml --since-days 14
+        run: python scripts/tracker.py --config scripts/config.yaml --since-days 14 --no-pdf
 
-      # 2) Commit dei report nel repository (non blocca se non ci sono cambi)
+      # 2) Verifica/crea report + copia nel public della dashboard
+      - name: Ensure report + copy news.json
+        shell: bash
+        run: |
+          mkdir -p report notebook-dashboard/public
+          ls -l report || true
+          if [ ! -f report/news.json ]; then
+            echo "[]"> report/news.json    # fallback per evitare 404
+          fi
+          cp -f report/news.json notebook-dashboard/public/news.json
+          ls -l notebook-dashboard/public
+
+      # 3) Commit snapshot (non blocca se nulla cambia)
       - name: Commit updated reports
         run: |
           git config user.name "actions-bot"
@@ -40,11 +52,11 @@ jobs:
           git commit -m "Update report MD/JSON and dashboard snapshot" || echo "No changes"
           git push || true
 
-      # 3) Node + Vite: build del sito statico
+      # 4) Build sito statico
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm" # velocizza: riusa i pacchetti Node
+          cache: "npm"
           cache-dependency-path: notebook-dashboard/package-lock.json
       - name: Build dashboard
         working-directory: notebook-dashboard
@@ -54,13 +66,13 @@ jobs:
           npm ci
           npm run build
 
-      # 4) Configura e carica il sito per Pages
+      # 5) Configura + upload per Pages (DOPO la build!)
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload static site
         uses: actions/upload-pages-artifact@v3
         with:
-          path: notebook-dashboard/dist # <- corretto (niente "distst")
+          path: notebook-dashboard/dist
 
   deploy:
     needs: run-tracker-and-build
@@ -72,8 +84,3 @@ jobs:
       - name: Deploy to Pages
         id: deployment
         uses: actions/deploy-pages@v4
-      - name: Ensure news.json in dashboard public
-        run: |
-          mkdir -p notebook-dashboard/public
-          cp -f report/news.json notebook-dashboard/public/news.json
-          ls -l notebook-dashboard/public
