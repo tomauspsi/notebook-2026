@@ -1,179 +1,326 @@
 # scripts/tracker.py
+# News tracker: RSS -> filter -> score -> MD/JSON + manifest (+ copy to dashboard)
+# deps: feedparser, PyYAML
+
+from __future__ import annotations
 import argparse
+import datetime as dt
+import hashlib
 import json
 import os
 import re
-from datetime import datetime, timedelta, timezone
+import subprocess
+import sys
+from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urlparse
+from typing import Iterable, List, Dict, Any, Optional
+import feedparser  # type: ignore
+import yaml        # type: ignore
 
-import feedparser
-import yaml
+# --------------------------
+# utils
+# --------------------------
 
-HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent
-REPORT_DIR = ROOT / "report"
-REPORT_DIR.mkdir(parents=True, exist_ok=True)
+def utcnow_iso() -> str:
+    return dt.datetime.now(dt.timezone.utc).isoformat()
 
-def load_config(path: Path) -> dict:
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
-
-def compile_patterns(patterns):
-    return [re.compile(p, flags=re.IGNORECASE) for p in (patterns or [])]
-
-def matches_any(text: str, regexes) -> bool:
-    return any(r.search(text) for r in regexes)
-
-def norm_dt(entry):
+def to_date_yyyy_mm_dd(entry: Any) -> str:
+    # prova published_parsed -> updated_parsed -> now UTC
     for key in ("published_parsed", "updated_parsed"):
-        t = entry.get(key)
+        t = getattr(entry, key, None)
         if t:
-            return datetime(*t[:6], tzinfo=timezone.utc)
-    return datetime.now(timezone.utc)
+            try:
+                return dt.datetime(*t[:6], tzinfo=dt.timezone.utc).date().isoformat()
+            except Exception:
+                pass
+    return dt.datetime.now(dt.timezone.utc).date().isoformat()
 
-def source_score(url: str) -> int:
-    host = (urlparse(url).hostname or "").lower()
-    tier3 = ("news.lenovo.com", "blogs.windows.com")
-    tier2 = ("www.notebookcheck.net", "www.windowscentral.com", "www.neowin.net", "techreport.com", "laptopmedia.com")
-    if any(h in host for h in tier3):
+def hostname(url: str) -> str:
+    try:
+        from urllib.parse import urlparse
+        h = urlparse(url).hostname or ""
+        return h.lower()
+    except Exception:
+        return ""
+
+def short_git_sha() -> str:
+    # preferisci GITHUB_SHA in CI
+    sha = os.environ.get("GITHUB_SHA")
+    if sha:
+        return sha[:7]
+    try:
+        out = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL)
+        return out.decode().strip()
+    except Exception:
+        return ""
+
+def ensure_dir(p: Path) -> None:
+    p.parent.mkdir(parents=True, exist_ok=True)
+
+# --------------------------
+# data types
+# --------------------------
+
+@dataclass
+class Item:
+    date: str
+    score: int
+    title: str
+    link: str
+    host: str
+
+# --------------------------
+# config
+# --------------------------
+
+@dataclass
+class Config:
+    include_patterns: List[re.Pattern]
+    exclude_patterns: List[re.Pattern]
+    sources: List[str]
+    domain_blocklist: List[str]
+    exclude_cjk: bool
+    window_days: int
+
+CJK_RE = re.compile(r"[\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]")
+
+def compile_patterns(patterns: Iterable[str]) -> List[re.Pattern]:
+    out = []
+    for p in patterns:
+        try:
+            out.append(re.compile(p))
+        except re.error:
+            # ignora pattern rotti
+            pass
+    return out
+
+def load_config(path: Path) -> Config:
+    with open(path, "r", encoding="utf-8") as f:
+        raw = yaml.safe_load(f) or {}
+
+    include = compile_patterns(raw.get("include_keywords", []))
+    exclude = compile_patterns(raw.get("exclude_keywords", []))
+    sources = [s.get("url") if isinstance(s, dict) else str(s) for s in raw.get("news_sources", [])]
+    block = [d.lower() for d in raw.get("domain_blocklist", [])]
+    exclude_cjk = bool(raw.get("exclude_cjk", False))
+    window_days = int((raw.get("meta", {}) or {}).get("window_days", 14))
+
+    return Config(
+        include_patterns=include,
+        exclude_patterns=exclude,
+        sources=sources,
+        domain_blocklist=block,
+        exclude_cjk=exclude_cjk,
+        window_days=window_days,
+    )
+
+# --------------------------
+# core
+# --------------------------
+
+HIGH_SOURCES = {
+    "blogs.windows.com",  # Microsoft
+    "news.lenovo.com",    # Lenovo
+}
+MID_SOURCES = {
+    "www.notebookcheck.net",
+    "notebookcheck.net",
+    "www.windowscentral.com",
+    "windowscentral.com",
+    "www.neowin.net",
+    "neowin.net",
+    "techreport.com",
+    "slashdot.org",
+    "laptopmedia.com",
+}
+
+def score_for_host(h: str) -> int:
+    if h in HIGH_SOURCES:
         return 3
-    if any(h in host for h in tier2):
+    if h in MID_SOURCES:
         return 2
     return 1
 
-# ---------- NEW: helpers per dedup e lingua ----------
-PARENS_RE = re.compile(r"\([^)]*\)")
-MULTISPACE_RE = re.compile(r"\s+")
-DIGITS_RE = re.compile(r"\d+")
+def matches_any(patterns: List[re.Pattern], text: str) -> bool:
+    return any(p.search(text) for p in patterns)
+
+def fetch_feed(url: str) -> List[Any]:
+    parsed = feedparser.parse(url)
+    return list(parsed.entries or [])
+
+def unique_by_link(items: List[Item]) -> List[Item]:
+    best: Dict[str, Item] = {}
+    for it in items:
+        if it.link not in best or it.score > best[it.link].score:
+            best[it.link] = it
+    return list(best.values())
+
+def within_window(date_str: str, since_days: int) -> bool:
+    try:
+        d = dt.date.fromisoformat(date_str)
+    except Exception:
+        return True
+    return d >= (dt.date.today() - dt.timedelta(days=since_days))
 
 def normalize_title(t: str) -> str:
-    """
-    Rende i titoli comparabili:
-    - toglie contenuti tra parentesi
-    - rimuove numeri (build, versioni, date)
-    - comprime spazi
-    - lowercase
-    """
-    t = PARENS_RE.sub("", t)
-    t = DIGITS_RE.sub("", t)
-    t = MULTISPACE_RE.sub(" ", t)
-    return t.strip().lower()
+    return t.strip()
 
-def is_cjk_heavy(text: str, thresh: int = 4) -> bool:
-    """True se il titolo contiene >= thresh caratteri CJK (cinese/giapponese/coreano)."""
-    count = sum(1 for ch in text if "\u4e00" <= ch <= "\u9fff")
-    return count >= thresh
-# -----------------------------------------------------
+# --------------------------
+# pipeline
+# --------------------------
 
-def to_markdown(groups):
-    lines = ["# Notebook & Windows News\n"]
-    for score in (3, 2, 1):
-        items = groups.get(score, [])
-        if not items:
-            continue
-        title = {3:"Notizie super (***)",2:"Notizie importanti (**)",1:"Notizie di contorno (*)"}[score]
-        lines.append(f"\n## {title}\n")
-        for it in items:
-            date_str = it["date"][:10]
-            lines.append(f"- {'★'*score} **{date_str}** — [{it['title']}]({it['link']})")
-    return "\n".join(lines) + "\n"
+def run_pipeline(cfg: Config, since_days: int) -> List[Item]:
+    collected: List[Item] = []
 
-def main():
-    ap = argparse.ArgumentParser(description="Lenovo/Windows News Tracker (MD+JSON)")
-    ap.add_argument("--config", required=True)
-    ap.add_argument("--since-days", type=int, default=14)
-    ap.add_argument("--no-copy", action="store_true", help="non copiare news.json nel browser")
-    ap.add_argument("--dashboard-path", default="notebook-dashboard/public/news.json")
-    args = ap.parse_args()
-
-    cfg = load_config(Path(args.config))
-    include_re = compile_patterns(cfg.get("include_keywords"))
-    exclude_re = compile_patterns(cfg.get("exclude_keywords"))
-    sources = [s["url"] for s in cfg.get("news_sources", []) if s.get("url")]
-    domain_blocklist = set((cfg.get("domain_blocklist") or []))
-    exclude_cjk = bool(cfg.get("exclude_cjk", False))
-
-    since_dt = datetime.now(timezone.utc) - timedelta(days=args.since_days)
-
-    items, seen_links = [], set()
-    seen_titles = set()  # dedup per titolo normalizzato
-
-    for url in sources:
-        feed = feedparser.parse(url)
-        for e in feed.entries:
-            link = e.get("link") or ""
-            title = (e.get("title") or "").strip()
-            host = (urlparse(link).hostname or "").lower()
-
-            # blocklist domini
-            if any(b in host for b in domain_blocklist):
+    for url in cfg.sources:
+        try:
+            entries = fetch_feed(url)
+        except Exception:
+            entries = []
+        for e in entries:
+            title = normalize_title(getattr(e, "title", "") or "")
+            link = getattr(e, "link", "") or ""
+            if not title or not link:
                 continue
 
-            # filtro CJK opzionale
-            if exclude_cjk and is_cjk_heavy(title):
+            h = hostname(link)
+
+            # blocklist dominio
+            if h in cfg.domain_blocklist:
                 continue
 
-            text = f"{title}\n{e.get('summary','')}"
-            if matches_any(text, exclude_re):
-                continue
-            if not matches_any(text, include_re):
+            # lingua cinese/giapponese/coreano (se richiesto)
+            if cfg.exclude_cjk and CJK_RE.search(title):
                 continue
 
-            dt = norm_dt(e)
-            if dt < since_dt:
+            # filtro include/exclude
+            text = title  # puoi estendere a summary se vuoi
+            if cfg.exclude_patterns and matches_any(cfg.exclude_patterns, text):
+                continue
+            if cfg.include_patterns and not matches_any(cfg.include_patterns, text):
                 continue
 
-            # dedup link
-            if link in seen_links:
+            date = to_date_yyyy_mm_dd(e)
+            if not within_window(date, since_days):
                 continue
 
-            # dedup "furbo" per titolo
-            key = normalize_title(title)
-            if key in seen_titles:
-                continue
+            s = score_for_host(h)
+            collected.append(Item(date=date, score=s, title=title, link=link, host=h))
 
-            seen_links.add(link)
-            seen_titles.add(key)
-            items.append({
-                "date": dt.astimezone(timezone.utc).isoformat(),
-                "score": source_score(link),
-                "title": title,
-                "link": link,
-            })
+    # dedup + sort
+    deduped = unique_by_link(collected)
+    deduped.sort(key=lambda x: (x.score, x.date, x.title), reverse=True)
+    return deduped
 
-    # sort per score desc poi data desc
-    items.sort(key=lambda x: (x["score"], x["date"]), reverse=True)
+# --------------------------
+# outputs
+# --------------------------
 
-    # group per markdown
-    grouped = {1: [], 2: [], 3: []}
+def write_markdown(items: List[Item], out_path: Path) -> None:
+    ensure_dir(out_path)
+    # gruppi per score
+    g3 = [it for it in items if it.score == 3]
+    g2 = [it for it in items if it.score == 2]
+    g1 = [it for it in items if it.score == 1]
+
+    def render(group: List[Item]) -> str:
+        lines = []
+        for it in group:
+            stars = "★" * it.score
+            lines.append(f"- {stars} **{it.date}** — [{it.title}]({it.link})")
+        return "\n".join(lines)
+
+    md = [
+        "# Notebook & Windows News",
+        "",
+        "## Notizie super (***)",
+        "",
+        render(g3),
+        "",
+        "## Notizie importanti (**)",
+        "",
+        render(g2),
+        "",
+        "## Notizie di contorno (*)",
+        "",
+        render(g1),
+        "",
+    ]
+    out_path.write_text("\n".join(md), encoding="utf-8")
+
+def write_json(items: List[Item], out_path: Path) -> None:
+    ensure_dir(out_path)
+    data = [dict(date=it.date, score=it.score, title=it.title, link=it.link) for it in items]
+    out_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+def write_manifest(items: List[Item], since_days: int, out_path: Path) -> None:
+    ensure_dir(out_path)
+    by = {"1": 0, "2": 0, "3": 0}
     for it in items:
-        grouped[it["score"]].append(it)
-
-    # write JSON
-    news_json = REPORT_DIR / "news.json"
-    news_json.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    # write manifest
+        by[str(it.score)] += 1
     manifest = {
         "mode": "LIVE",
-        "since_days": args.since_days,
-        "generated_utc": datetime.now(timezone.utc).isoformat(),
+        "since_days": since_days,
+        "generated_utc": utcnow_iso(),
         "count_total": len(items),
-        "count_by_score": {str(k): len(v) for k, v in grouped.items()},
-        "git_commit": os.environ.get("GITHUB_SHA", "")[:7],
+        "count_by_score": by,
+        "git_commit": short_git_sha(),
     }
-    (REPORT_DIR / "run-manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    out_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    # write Markdown
-    md_path = REPORT_DIR / "notebook-tracking.md"
-    md_path.write_text(to_markdown(grouped), encoding="utf-8")
+# --------------------------
+# cli
+# --------------------------
 
-    # copia nel browser locale
+def parse_args() -> argparse.Namespace:
+    ap = argparse.ArgumentParser(description="Lenovo/Windows news tracker")
+    ap.add_argument("--config", required=True, help="Percorso file YAML config")
+    ap.add_argument("--since-days", type=int, default=14, help="Finestra temporale (giorni)")
+    ap.add_argument("--no-pdf", action="store_true", help="Ignora generazione PDF (placeholder, non usato)")
+    ap.add_argument("--no-copy", action="store_true", help="Non copiare news.json nel dashboard")
+    ap.add_argument("--dashboard-path", default="notebook-dashboard/public/news.json",
+                    help="Dove copiare news.json per il browser")
+    return ap.parse_args()
+
+def main() -> None:
+    args = parse_args()
+    cfg = load_config(Path(args.config))
+
+    since_days = int(args.since_days or cfg.window_days)
+    print(f"[tracker] fetching {len(cfg.sources)} feed(s), window={since_days}d")
+
+    items = run_pipeline(cfg, since_days=since_days)
+    print(f"[tracker] items kept: {len(items)}")
+
+    # output paths
+    report_dir = Path("report")
+    md_path = report_dir / "notebook-tracking.md"
+    json_path = report_dir / "news.json"
+    manifest_path = report_dir / "run-manifest.json"
+
+    write_markdown(items, md_path)
+    write_json(items, json_path)
+    write_manifest(items, since_days, manifest_path)
+
+    print(f"[tracker] wrote: {md_path}, {json_path}, {manifest_path}")
+
+    # optional copy to dashboard
     if not args.no_copy:
-        dest = (ROOT / args.dashboard_path).resolve()
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(news_json.read_text(encoding="utf-8"), encoding="utf-8")
+        dst = Path(args.dashboard_path)
+        ensure_dir(dst)
+        try:
+            dst.write_text(json_path.read_text(encoding="utf-8"), encoding="utf-8")
+            print(f"[tracker] copied news.json -> {dst}")
+        except Exception as e:
+            print(f"[tracker] copy failed: {e}", file=sys.stderr)
+
+    # PDF non gestito (placeholder per compatibilità flag)
+    if args.no_pdf:
+        print("[tracker] --no-pdf: skipping PDF (not implemented)")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n[tracker] aborted by user", file=sys.stderr)
+        sys.exit(130)
