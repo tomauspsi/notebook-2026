@@ -74,7 +74,10 @@ jobs:
       - name: Deploy to Pages
         id: deployment
         uses: actions/deploy-pages@v4
-      
+      - name: Set timestamp
+        id: set_ts
+        run: echo "now=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+
       # NUOVO: Invio email automatico con link al dashboard
       - name: Send dashboard email
         uses: dawidd6/action-send-mail@v3
@@ -83,16 +86,16 @@ jobs:
           server_port: 587
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "📊 Tracker Report Aggiornato - ${{ github.run_started_at }}"
+          subject: "📊 Tracker Report Aggiornato - ${{ steps.set_ts.outputs.now }}"
           html_body: |
             <h2>🎯 Report Tracker Notebook-2026</h2>
             <p>Il tracker è stato eseguito con successo!</p>
-            
+
             <p><strong>🔗 <a href="${{ steps.deployment.outputs.page_url }}">Apri Dashboard</a></strong></p>
-            
+
             <hr>
             <p><small>
-            📅 Eseguito: ${{ github.run_started_at }}<br>
+            📅 Eseguito: ${{ steps.set_ts.outputs.now }}<br>
             🔄 Run ID: ${{ github.run_id }}<br>
             📂 Repository: ${{ github.repository }}
             </small></p>
