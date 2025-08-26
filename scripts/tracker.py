@@ -290,9 +290,49 @@ def write_markdown(items: List[Item], out_path: Path) -> None:
     out_path.write_text("\n".join(md), encoding="utf-8")
 
 def write_json(items: List[Item], out_path: Path) -> None:
+    import datetime as dt
+
     ensure_dir(out_path)
-    data = [dict(date=it.date, score=it.score, title=it.title, link=it.link) for it in items]
-    out_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    # Carica lo storico, se esiste
+    if out_path.exists():
+        with open(out_path, "r", encoding="utf-8") as f:
+            try:
+                old_data = json.load(f)
+            except Exception:
+                old_data = []
+    else:
+        old_data = []
+
+    # Indicizza le vecchie news per link
+    seen_links = {it["link"]: it for it in old_data}
+
+    # Aggiungi/aggiorna le news nuove
+    for it in items:
+        d = dict(
+            date=it.date,
+            score=it.score,
+            title=it.title,
+            link=it.link,
+            keywords=getattr(it, 'keywords', []),
+            cluster_id=getattr(it, 'cluster_id', -1),
+        )
+        seen_links[it.link] = d
+
+    # Tieni solo notizie degli ultimi 12 mesi
+    def recent_only(x):
+        try:
+            d = dt.date.fromisoformat(x["date"])
+            cutoff = dt.date.today() - dt.timedelta(days=365)
+            return d >= cutoff
+        except Exception:
+            return True
+
+    new_data = [x for x in seen_links.values() if recent_only(x)]
+
+    # Ordina per data (più recente prima)
+    new_data.sort(key=lambda x: x["date"], reverse=True)
+
+    out_path.write_text(json.dumps(new_data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 def write_manifest(items: List[Item], since_days: int, out_path: Path) -> None:
     ensure_dir(out_path)
