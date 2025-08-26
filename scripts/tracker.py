@@ -17,6 +17,16 @@ from typing import Iterable, List, Dict, Any, Optional
 import feedparser  # type: ignore
 import yaml        # type: ignore
 
+@dataclass
+class Item:
+    date: str
+    score: int
+    title: str
+    link: str
+    host: str
+    keywords: list = None
+    cluster_id: int = -1
+
 # --------------------------
 # utils
 # --------------------------
@@ -207,8 +217,39 @@ def run_pipeline(cfg: Config, since_days: int) -> List[Item]:
             s = score_for_host(h)
             collected.append(Item(date=date, score=s, title=title, link=link, host=h))
 
-    # dedup + sort
+    # dedup
     deduped = unique_by_link(collected)
+
+    # opzionale: keyword & clustering (disabilitato se le librerie non sono installate)
+    try:
+        from keybert import KeyBERT  # type: ignore
+        from sentence_transformers import SentenceTransformer  # type: ignore
+        from sklearn.cluster import AgglomerativeClustering  # type: ignore
+
+        model = SentenceTransformer('all-MiniLM-L6-v2')
+        kw_model = KeyBERT(model)
+
+        embeddings = [model.encode(it.title) for it in deduped]
+        if len(embeddings) > 1:
+            clustering = AgglomerativeClustering(n_clusters=None, distance_threshold=0.5).fit(embeddings)
+            cluster_ids = list(clustering.labels_)
+        else:
+            cluster_ids = [0] * len(embeddings)
+
+        for i, it in enumerate(deduped):
+            try:
+                keywords = kw_model.extract_keywords(it.title, keyphrase_ngram_range=(1, 2), stop_words='italian', top_n=3)
+                it.keywords = [k[0] for k in keywords]
+            except Exception:
+                it.keywords = []
+            try:
+                it.cluster_id = int(cluster_ids[i])
+            except Exception:
+                it.cluster_id = 0
+    except Exception:
+        # librerie non disponibili: ignora feature avanzate
+        pass
+
     deduped.sort(key=lambda x: (x.score, x.date, x.title), reverse=True)
     return deduped
 
