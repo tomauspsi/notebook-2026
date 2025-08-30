@@ -222,19 +222,34 @@ def run_pipeline(cfg: Config, since_days: int) -> List[Item]:
 
             h = hostname(link)
 
-            # blocklist dominio
-            if h in cfg.domain_blocklist:
+            # blocklist dominio (match per suffisso)
+            def blocked(host: str) -> bool:
+                for d in cfg.domain_blocklist:
+                    if host == d or host.endswith("." + d):
+                        return True
+                return False
+            if blocked(h):
                 continue
 
-            # lingua CJK (se richiesto)
-            if cfg.exclude_cjk and CJK_RE.search(title):
-                continue
-
-            # filtro include/exclude su titolo + summary
+            # summary + fallback su content[]
             raw_summary = getattr(e, "summary", "") or (e.get("summary") if isinstance(e, dict) else "")
+            if not raw_summary:
+                try:
+                    contents = getattr(e, "content", None) or (e.get("content") if isinstance(e, dict) else None)
+                    if contents and isinstance(contents, list) and contents:
+                        raw_summary = contents[0].get("value") or ""
+                except Exception:
+                    pass
             summary = normalize_text(raw_summary)
+
+            # testo completo per i filtri
             text = f"{title} {summary}".strip()
 
+            # lingua CJK (se richiesto) — applicata a tutto il testo
+            if cfg.exclude_cjk and CJK_RE.search(text):
+                continue
+
+            # filtri include/exclude
             if cfg.exclude_patterns and matches_any(cfg.exclude_patterns, text):
                 continue
             if cfg.include_patterns and not matches_any(cfg.include_patterns, text):
