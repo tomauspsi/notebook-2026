@@ -5,6 +5,7 @@ __pycache__/
 *.pyd
 *.egg-info/
 .venv/
+.env
 
 # --- Node / Vite ---
 node_modules/
@@ -12,12 +13,23 @@ dist/
 *.log
 .vite/
 
+# --- Build / Cache ---
+.cache/
+coverage/
+*.tmp
+
 # --- Reports (generati automaticamente, non versionare) ---
 report/*.md
 report/*.json
 report/*.pdf
 
+# --- Frontend ---
+notebook-dashboard/public/news.json
+
 # --- OS / Editor files ---
 .DS_Store
 Thumbs.db
 *.swp
+*.swo
+.idea/
+.vscode/
