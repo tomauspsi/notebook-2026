@@ -1,2 +1,5 @@
 feedparser
 PyYAML
+keybert
+sentence-transformers
+scikit-learn
