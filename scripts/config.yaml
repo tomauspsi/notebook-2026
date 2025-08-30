@@ -97,3 +97,19 @@ domain_blocklist:
 
 # Escludi automaticamente titoli con caratteri CJK
 exclude_cjk: true
+
+channels:
+  hardware_include:
+    - "(?i)thinkpad|latitude|elitebook|zbook|xps|precision"
+    - "(?i)\\b2560\\s*[x×]\\s*(1600|1440)\\b|\\b(WQXGA|QHD\\+|2\\.5K|WQHD)\\b"
+    - "(?i)\\b(3[0-9]{2}|400)\\s*nits?\\b"
+    - "(?i)\\b(anti-?glare|matte)\\b"
+    - "(?i)wifi\\s*7|802\\.11be"
+    - "(?i)fcc\\b|fccid\\b|\\b3c\\b|radio equipment directive|\\bred\\b"
+
+  windows_include:
+    - "(?i)windows\\s?(11|12)"
+    - "(?i)insider preview|canary|dev channel|beta channel|release preview"
+    - "(?i)build\\s*\\d+|kb\\d{6,}"
+    - "(?i)major update|feature update|24h2|hudson valley"
+    - "(?i)copilot\\+|copilot on windows|semantic search"
