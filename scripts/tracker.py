@@ -29,6 +29,7 @@ class Item:
     title: str
     link: str
     host: str
+    channel: str = "misc"   # "hardware" | "windows" | "misc"
     keywords: list | None = None
     cluster_id: int = -1
 
@@ -41,6 +42,8 @@ class Config:
     domain_blocklist: List[str]
     exclude_cjk: bool
     window_days: int
+    ch_hw_include: List[re.Pattern]
+    ch_win_include: List[re.Pattern]
 
 
 # --------------------------
@@ -49,10 +52,11 @@ class Config:
 
 CJK_RE = re.compile(r"[\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]")
 
-# Bonus scoring hard patterns (usate solo per aumentare il punteggio, non come filtro)
-RES_RE = re.compile(r"(?i)\b2560\s*[x]\s*(1600|1440)\b")     # 2560x1600 / 2560x1440
-NITS_RE = re.compile(r"(?i)\b(3[0-9]{2}|400)\s*nits?\b")     # 300–399 o 400 nits
-MATTE_RE = re.compile(r"(?i)\b(anti-?glare|matte)\b")        # finitura opaca
+# Bonus scoring patterns (solo aumento punteggio, non filtro)
+RES_RE = re.compile(r"(?i)\b2560\s*[x]\s*(1600|1440)\b")   # 2560x1600 / 2560x1440
+NITS_RE = re.compile(r"(?i)\b(3[0-9]{2}|400)\s*nits?\b")   # 300–399 o 400 nits
+MATTE_RE = re.compile(r"(?i)\b(anti-?glare|matte)\b")      # finitura opaca
+FCC_RE = re.compile(r"(?i)\bfcc(id)?\b|\b3c\b|\bradio equipment directive\b|\bce mark\b")
 
 HIGH_SOURCES = {
     "blogs.windows.com",   # Microsoft
@@ -68,8 +72,8 @@ MID_SOURCES = {
     "techreport.com",
     "slashdot.org",
     "laptopmedia.com",
+    "fccid.io",
 }
-
 
 # --------------------------
 # utils
@@ -103,7 +107,6 @@ def hostname(url: str) -> str:
 
 
 def short_git_sha() -> str:
-    # Preferisci GITHUB_SHA in CI
     sha = os.environ.get("GITHUB_SHA")
     if sha:
         return sha[:7]
@@ -140,6 +143,10 @@ def load_config(path: Path) -> Config:
     exclude_cjk = bool(raw.get("exclude_cjk", False))
     window_days = int((raw.get("meta", {}) or {}).get("window_days", 14))
 
+    ch = raw.get("channels", {}) or {}
+    ch_hw_include = compile_patterns(ch.get("hardware_include", []))
+    ch_win_include = compile_patterns(ch.get("windows_include", []))
+
     return Config(
         include_patterns=include,
         exclude_patterns=exclude,
@@ -147,6 +154,8 @@ def load_config(path: Path) -> Config:
         domain_blocklist=block,
         exclude_cjk=exclude_cjk,
         window_days=window_days,
+        ch_hw_include=ch_hw_include,
+        ch_win_include=ch_win_include,
     )
 
 
@@ -160,6 +169,14 @@ def score_for_host(h: str) -> int:
 
 def matches_any(patterns: List[re.Pattern], text: str) -> bool:
     return any(p.search(text) for p in patterns)
+
+
+def detect_channel(text: str, cfg: Config) -> str:
+    if matches_any(cfg.ch_hw_include, text):
+        return "hardware"
+    if matches_any(cfg.ch_win_include, text):
+        return "windows"
+    return "misc"
 
 
 def fetch_feed(url: str) -> List[Any]:
@@ -261,15 +278,22 @@ def run_pipeline(cfg: Config, since_days: int) -> List[Item]:
 
             # base score per fonte
             s = score_for_host(h)
-            # bonus score per match tecnici
+            # bonus score per feature hardware/rumor/certificazioni
             if RES_RE.search(text):
                 s += 2
             if NITS_RE.search(text):
                 s += 1
             if MATTE_RE.search(text):
                 s += 1
+            if FCC_RE.search(text):
+                s += 2  # leak/certificazione: forte segnale pre-CES
 
-            collected.append(Item(date=date, score=s, title=title, link=link, host=h))
+            # canale + boost soft (uguale per entrambi)
+            ch = detect_channel(text, cfg)
+            if ch in ("hardware", "windows"):
+                s += 1
+
+            collected.append(Item(date=date, score=s, title=title, link=link, host=h, channel=ch))
 
     # dedup per link
     deduped = unique_by_link(collected)
@@ -328,7 +352,8 @@ def write_markdown(items: List[Item], out_path: Path) -> None:
         lines: List[str] = []
         for it in group:
             stars = "★" * min(it.score, 5)
-            lines.append(f"- {stars} **{it.date}** — [{it.title}]({it.link})")
+            tag = "💻" if it.channel == "hardware" else ("🪟" if it.channel == "windows" else "📰")
+            lines.append(f"- {stars} {tag} **{it.date}** — [{it.title}]({it.link})")
         return "\n".join(lines) if lines else "_(nessuna voce)_"
 
     md = [
@@ -374,6 +399,7 @@ def write_json(items: List[Item], out_path: Path) -> None:
             title=it.title,
             link=it.link,
             host=it.host,
+            channel=it.channel,
             keywords=(it.keywords or []),
             cluster_id=(it.cluster_id if it.cluster_id is not None else -1),
         )
@@ -418,7 +444,7 @@ def write_manifest(items: List[Item], since_days: int, out_path: Path) -> None:
 # --------------------------
 
 def parse_args() -> argparse.Namespace:
-    ap = argparse.ArgumentParser(description="Lenovo/Windows news tracker")
+    ap = argparse.ArgumentParser(description="Notebook/Windows news tracker (pre-CES)")
     ap.add_argument("--config", required=True, help="Percorso file YAML config")
     ap.add_argument("--since-days", type=int, default=14, help="Finestra temporale (giorni)")
     ap.add_argument("--no-pdf", action="store_true", help="Ignora generazione PDF (placeholder, non usato)")
