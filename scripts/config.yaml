@@ -1,90 +1,84 @@
-meta:
-  timezone: "Europe/Rome"
-  run_days: [1, 15]
-  window_days: 14
+# Notebook 2026 — Tracker (Fase 1, pre-CES)
+# Nessuna logica di prezzo: priorità a rumor/news, certificazioni, major patch Windows.
 
-# --- COSA VOGLIO PRENDERE (ampio ma mirato, pre-CES)
-include_keywords:
-  # Termini generali notebook/business/dev
-  - "(?i)laptop|notebook|ultrabook|workstation|business"
-  # Linee business diffuse (multi-brand, non solo Lenovo)
-  - "(?i)thinkpad|latitude|precision|elitebook|probook|zbook|dynabook|lifebook|travelmate|gram|spectre|envy|xps"
-  # Display / risoluzioni produttività (16:10 hi-res)
-  - "(?i)\\b(2560\\s*[x×]\\s*1600|2560\\s*[x×]\\s*1440|WQXGA|QHD\\+|2\\.5K|WQHD)\\b"
-  # Luminosità e finitura
-  - "(?i)\\b(3[0-9]{2}|400)\\s*nits?\\b"
-  - "(?i)\\b(anti-?glare|matte)\\b"
-  # Connettività nuova generazione
-  - "(?i)wifi\\s*7|802\\.11be|bluetooth\\s*5(\\.3|\\.4)?"
-  # Sicurezza / autenticazione
-  - "(?i)fingerprint|windows\\s*hello|face\\s*recognition"
-  # RAM / storage espandibili (o capienza dichiarata)
-  - "(?i)(upgradable|upgradeable|expandable|sodimm|ram\\s*upgrade|m\\.2|nvme|1tb|2tb)"
-  # Webcam / privacy
-  - "(?i)webcam|1080p|full\\s*hd\\s*camera|privacy\\s*shutter"
-  # Certificazioni / leaks (pre-annunci)
-  - "(?i)fcc\\b|fccid\\b|\\b3c\\b|china\\s*compulsory\\s*certification|radio\\s*equipment\\s*directive|\\bred\\b|ce\\s*mark"
-  # Eventi / fiere (per pre-annunci)
-  - "(?i)CES\\s*2026|computex|IFA\\s*2025|MWC\\s*2026"
-  # Windows (binario 2: OS / build / feature)
-  - "(?i)windows\\s*(11|12)|insider\\s*preview|canary|dev\\s*channel|beta\\s*channel|release\\s*preview|build\\s*\\d+|kb\\d{6,}|major\\s*update|feature\\s*update|24h2|hudson\\s*valley|copilot\\+|copilot\\s*on\\s*windows|semantic\\s*search"
+feeds:
+  # News/rumor generalisti
+  - { url: "https://www.notebookcheck.net/newsfeed.986.xml", tag: "nbc" }
+  - { url: "https://www.windowscentral.com/rss", tag: "win" }
+  - { url: "https://www.neowin.net/news/rss/", tag: "win" }
+  - { url: "https://blogs.windows.com/feed/", tag: "msft" }
+  - { url: "https://www.theverge.com/rss/index.xml", tag: "gen" }
+  - { url: "https://www.engadget.com/rss.xml", tag: "gen" }
+  - { url: "https://www.tomshardware.com/feeds/all", tag: "hw" }
+  - { url: "https://www.anandtech.com/rss", tag: "hw" }
+  - { url: "https://www.xda-developers.com/feed/", tag: "gen" }
 
-# --- COSA TAGLIO (rumore, promo, categorie non notebook)
+  # Brand principali (non solo Lenovo)
+  - { url: "https://news.lenovo.com/feed/", tag: "brand" }
+  - { url: "https://press.hp.com/us/en/rss/press-releases.rss", tag: "brand" }
+  - { url: "https://www.dell.com/learn/us/en/uscorp1/rssfeeds", tag: "brand" }
+  - { url: "https://press.asus.com/feed/", tag: "brand" }
+  - { url: "https://globalpress.acer.com/feed/", tag: "brand" }
+  - { url: "https://www.msi.com/rss", tag: "brand" }
+
+  # Certificazioni/regolatori (FCC, 3C, RED/CE) – spesso rumor affidabili
+  - { url: "https://fccid.io/feed", tag: "fcc" }
+  # Per 3C/RED non sempre ci sono feed stabili: coperti via keyword su siti generalisti
+
+# Must-match (almeno uno) per passare il gate hardware/OS (lasciamo passare FCC/strong)
+must_match_any:
+  # Display/resoluzione e pannello
+  - "(?i)2560\\s?[×x]\\s?1600|wqxga|qhd\\+"
+  - "(?i)matte|opaco|anti[-\\s]?glare"
+  - "(?i)300\\s?nit|350\\s?nit|400\\s?nit"
+
+  # Espandibilità e build
+  - "(?i)ram\\s+(upgradable|expandable|so-dimm)"
+  - "(?i)ssd|m\\.2|nvme|2tb|1tb"
+  - "(?i)mil[-\\s]?std|chassis|magnesium|alloy|thinkpad|t\\d{3}|p\\d{3}"
+
+  # I/O / biometria / webcam
+  - "(?i)fingerprint|windows\\s+hello|ir\\s+camera"
+  - "(?i)1080p\\s+webcam|4k\\s+webcam|privacy\\s+shutter"
+
+  # Connettività
+  - "(?i)802\\.11be|wifi\\s*7|bluetooth\\s*5\\.(3|4|5)"
+
+include_keywords_positive:
+  # Windows 11 big patch, 24H2, Copilot on Windows
+  - "(?i)windows\\s*11\\s*(24h2|major update|feature update|build|patch|release)"
+  - "(?i)copilot\\+|copilot on windows|hudson\\s+valley"
+  # Nuove linee business/office
+  - "(?i)elitebook|latitude|thinkbook|thinkpad|probook|travelmate|expertbook"
+  # FCC/3C/RED leak
+  - "(?i)fcc|fccid|\\b3c\\b|china\\s+compulsory\\s+certification|\\bred\\b|radio\\s+equipment\\s+directive|ce\\s+mark"
+
+include_keywords_strong:
+  # Windows 12 (rumor o leak), grandi annunci MS
+  - "(?i)windows\\s*12|next\\s+version\\s+of\\s+windows"
+  - "(?i)24h2\\b|hudson\\s+valley\\b"
+  # Early certifications (doppio boost)
+  - "(?i)granted\\s+by\\s+fcc|filed\\s+with\\s+fcc|type\\s+approval\\s+3c"
+
 exclude_keywords:
-  # Gaming / console / intrattenimento
-  - "(?i)chromebook"
-  - "(?i)ideapad|legion|gaming|xbox|playstation|dlc|assassin|mirage"
-  # Promo/affiliazioni/deals
-  - "(?i)coupon|expired|giveaway|promo|offerta|sconto"
-  - "(?i)\\bdeal\\b"
-  - "(?i)get .* for (just|only)\\b"
-  - "(?i)license\\b"
-  - "(?i)vpn\\b"
-  # Categorie consumer non notebook
-  - "(?i)phone|smartphone|tablet|xiaomi|huawei|oppo|vivo|oneplus|iphone|galaxy\\s?s\\d+"
-  - "(?i)earbud|headset|speaker|tv|projector|camera\\b(?!\\s*privacy)|drone|washing|fridge|appliance"
-  - "(?i)router\\b|smart home|iot\\b"
-  # Rumore generico/social
-  - "(?i)shitpost|meme|random|cat"
+  # Evita rumor clickbait e device non laptop
+  - "(?i)smartphone|tablet|router|tv|gpu\\s+rumor|console"
+  - "(?i)giveaway|coupon|discount|price\\s+drop|deal|affiliat"
+  - "(?i)gaming\\s+benchmarks|mining"
+  - "(?i)how\\s+to|guide|tutorial"   # rumore non news
+  - "(?i)review|recensione"          # opzionale: se vuoi tenerle, rimuovi questa riga
 
-# --- FONTI (con FCC per leak/certificazioni)
-news_sources:
-  - url: "https://www.notebookcheck.net/rss/news.xml"
-  - url: "https://news.lenovo.com/feed/"
-  - url: "https://blogs.windows.com/feed/"
-  - url: "https://www.windowscentral.com/feed"
-  - url: "https://www.neowin.net/news/rss"
-  - url: "https://techreport.com/feed/"
-  - url: "https://slashdot.org/rss/slashdotMain"
-  - url: "https://laptopmedia.com/feed/"
-  # Leak/certificazioni utili:
-  - url: "https://fccid.io/feed"
+trusted_hosts:
+  - "(?i)notebookcheck\\.net"
+  - "(?i)windowscentral\\.com"
+  - "(?i)theverge\\.com"
+  - "(?i)neowin\\.net"
+  - "(?i)anandtech\\.com"
+  - "(?i)tomshardware\\.com"
+  - "(?i)blogs\\.windows\\.com"
 
-# --- Blocchi di sicurezza (se qualcosa filtra)
-domain_blocklist:
-  - "ithome.com"
-  - "mydrivers.com"
+low_quality_hosts:
+  - "(?i)weibo\\.cn|reddit\\.com|facebook\\.com|tiktok\\.com|pinterest\\.com"
 
-# Escludi automaticamente titoli/testi con molti caratteri CJK
-exclude_cjk: true
-
-# --- CANALI per tagging + boosting soft (hardware vs windows)
-channels:
-  hardware_include:
-    - "(?i)thinkpad|latitude|precision|elitebook|probook|zbook|dynabook|lifebook|travelmate|gram|spectre|envy|xps"
-    - "(?i)\\b(2560\\s*[x×]\\s*(1600|1440)|WQXGA|QHD\\+|2\\.5K|WQHD)\\b"
-    - "(?i)\\b(3[0-9]{2}|400)\\s*nits?\\b"
-    - "(?i)\\b(anti-?glare|matte)\\b"
-    - "(?i)wifi\\s*7|802\\.11be"
-    - "(?i)fingerprint|windows\\s*hello"
-    - "(?i)(upgradable|upgradeable|expandable|sodimm|m\\.2|nvme)"
-    - "(?i)webcam|privacy\\s*shutter"
-    - "(?i)\\bfcc(id)?\\b|\\b3c\\b|radio\\s*equipment\\s*directive|\\bred\\b|ce\\s*mark"
-    - "(?i)CES\\s*2026|computex|IFA\\s*2025|MWC\\s*2026"
-
-  windows_include:
-    - "(?i)windows\\s*(11|12)"
-    - "(?i)insider\\s*preview|canary|dev\\s*channel|beta\\s*channel|release\\s*preview"
-    - "(?i)build\\s*\\d+|kb\\d{6,}"
-    - "(?i)major\\s*update|feature\\s*update|24h2|hudson\\s*valley"
-    - "(?i)copilot\\+|copilot\\s*on\\s*windows|semantic\\s*search"
+# Uscita
+output_path: "public/news.json"
