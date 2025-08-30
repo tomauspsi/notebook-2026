@@ -25,7 +25,7 @@
         border: 1px solid rgba(255,255,255,.06);
         border-radius: 16px; padding: 16px; box-shadow: 0 10px 25px rgba(0,0,0,.25);
       }
-      #app { display:block; }
+      #root { display:block; }
       footer { color: var(--muted); font-size: 12px; margin-top: 32px; text-align:center; opacity:.9;}
       a { color: var(--accent); text-decoration: none; }
       a:hover { text-decoration: underline; }
@@ -43,15 +43,14 @@
         </nav>
       </header>
 
-      <main id="app" class="card">
-        <!-- React/TS monterà qui -->
-      </main>
+      <main id="root" class="card"></main>
 
       <footer>
         <p>Build su GitHub Pages • dati da <code>public/news.json</code> • base URL: <code>import.meta.env.BASE_URL</code></p>
       </footer>
     </div>
 
-    <script type="module" src="/src/main.tsx"></script>
+    <!-- relativo: funziona in dev e su GH Pages -->
+    <script type="module" src="./src/main.tsx"></script>
   </body>
 </html>
