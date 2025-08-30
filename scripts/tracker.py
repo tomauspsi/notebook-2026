@@ -1,11 +1,10 @@
 # scripts/tracker.py
 # News tracker: RSS -> filter -> score -> MD/JSON + manifest (+ copy to dashboard)
 # deps: feedparser, PyYAML
-
 from __future__ import annotations
+
 import argparse
 import datetime as dt
-import hashlib
 import json
 import os
 import re
@@ -13,59 +12,11 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Dict, Any, Optional
+from typing import Iterable, List, Dict, Any
+
 import feedparser  # type: ignore
 import yaml        # type: ignore
-
-@dataclass
-class Item:
-    date: str
-    score: int
-    title: str
-    link: str
-    host: str
-    keywords: list = None
-    cluster_id: int = -1
-
-# --------------------------
-# utils
-# --------------------------
-
-def utcnow_iso() -> str:
-    return dt.datetime.now(dt.timezone.utc).isoformat()
-
-def to_date_yyyy_mm_dd(entry: Any) -> str:
-    # prova published_parsed -> updated_parsed -> now UTC
-    for key in ("published_parsed", "updated_parsed"):
-        t = getattr(entry, key, None)
-        if t:
-            try:
-                return dt.datetime(*t[:6], tzinfo=dt.timezone.utc).date().isoformat()
-            except Exception:
-                pass
-    return dt.datetime.now(dt.timezone.utc).date().isoformat()
-
-def hostname(url: str) -> str:
-    try:
-        from urllib.parse import urlparse
-        h = urlparse(url).hostname or ""
-        return h.lower()
-    except Exception:
-        return ""
-
-def short_git_sha() -> str:
-    # preferisci GITHUB_SHA in CI
-    sha = os.environ.get("GITHUB_SHA")
-    if sha:
-        return sha[:7]
-    try:
-        out = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL)
-        return out.decode().strip()
-    except Exception:
-        return ""
-
-def ensure_dir(p: Path) -> None:
-    p.parent.mkdir(parents=True, exist_ok=True)
+from html import unescape
 
 # --------------------------
 # data types
@@ -78,10 +29,9 @@ class Item:
     title: str
     link: str
     host: str
+    keywords: list | None = None
+    cluster_id: int = -1
 
-# --------------------------
-# config
-# --------------------------
 
 @dataclass
 class Config:
@@ -92,10 +42,84 @@ class Config:
     exclude_cjk: bool
     window_days: int
 
+
+# --------------------------
+# constants / regex
+# --------------------------
+
 CJK_RE = re.compile(r"[\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]")
 
+# Bonus scoring hard patterns (usate solo per aumentare il punteggio, non come filtro)
+RES_RE = re.compile(r"(?i)\b2560\s*[x]\s*(1600|1440)\b")     # 2560x1600 / 2560x1440
+NITS_RE = re.compile(r"(?i)\b(3[0-9]{2}|400)\s*nits?\b")     # 300–399 o 400 nits
+MATTE_RE = re.compile(r"(?i)\b(anti-?glare|matte)\b")        # finitura opaca
+
+HIGH_SOURCES = {
+    "blogs.windows.com",   # Microsoft
+    "news.lenovo.com",     # Lenovo newsroom
+}
+MID_SOURCES = {
+    "www.notebookcheck.net",
+    "notebookcheck.net",
+    "www.windowscentral.com",
+    "windowscentral.com",
+    "www.neowin.net",
+    "neowin.net",
+    "techreport.com",
+    "slashdot.org",
+    "laptopmedia.com",
+}
+
+
+# --------------------------
+# utils
+# --------------------------
+
+def utcnow_iso() -> str:
+    return dt.datetime.now(dt.timezone.utc).isoformat()
+
+
+def to_date_yyyy_mm_dd(entry: Any) -> str:
+    """Preferisci published_parsed -> updated_parsed -> oggi UTC."""
+    for key in ("published_parsed", "updated_parsed"):
+        t = getattr(entry, key, None)
+        if not t and isinstance(entry, dict):
+            t = entry.get(key)
+        if t:
+            try:
+                return dt.datetime(*t[:6], tzinfo=dt.timezone.utc).date().isoformat()
+            except Exception:
+                pass
+    return dt.datetime.now(dt.timezone.utc).date().isoformat()
+
+
+def hostname(url: str) -> str:
+    try:
+        from urllib.parse import urlparse
+        h = urlparse(url).hostname or ""
+        return h.lower()
+    except Exception:
+        return ""
+
+
+def short_git_sha() -> str:
+    # Preferisci GITHUB_SHA in CI
+    sha = os.environ.get("GITHUB_SHA")
+    if sha:
+        return sha[:7]
+    try:
+        out = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL)
+        return out.decode().strip()
+    except Exception:
+        return ""
+
+
+def ensure_dir(p: Path) -> None:
+    p.parent.mkdir(parents=True, exist_ok=True)
+
+
 def compile_patterns(patterns: Iterable[str]) -> List[re.Pattern]:
-    out = []
+    out: List[re.Pattern] = []
     for p in patterns:
         try:
             out.append(re.compile(p))
@@ -103,6 +127,7 @@ def compile_patterns(patterns: Iterable[str]) -> List[re.Pattern]:
             # ignora pattern rotti
             pass
     return out
+
 
 def load_config(path: Path) -> Config:
     with open(path, "r", encoding="utf-8") as f:
@@ -124,25 +149,6 @@ def load_config(path: Path) -> Config:
         window_days=window_days,
     )
 
-# --------------------------
-# core
-# --------------------------
-
-HIGH_SOURCES = {
-    "blogs.windows.com",  # Microsoft
-    "news.lenovo.com",    # Lenovo
-}
-MID_SOURCES = {
-    "www.notebookcheck.net",
-    "notebookcheck.net",
-    "www.windowscentral.com",
-    "windowscentral.com",
-    "www.neowin.net",
-    "neowin.net",
-    "techreport.com",
-    "slashdot.org",
-    "laptopmedia.com",
-}
 
 def score_for_host(h: str) -> int:
     if h in HIGH_SOURCES:
@@ -151,12 +157,15 @@ def score_for_host(h: str) -> int:
         return 2
     return 1
 
+
 def matches_any(patterns: List[re.Pattern], text: str) -> bool:
     return any(p.search(text) for p in patterns)
+
 
 def fetch_feed(url: str) -> List[Any]:
     parsed = feedparser.parse(url)
     return list(parsed.entries or [])
+
 
 def unique_by_link(items: List[Item]) -> List[Item]:
     best: Dict[str, Item] = {}
@@ -165,6 +174,7 @@ def unique_by_link(items: List[Item]) -> List[Item]:
             best[it.link] = it
     return list(best.values())
 
+
 def within_window(date_str: str, since_days: int) -> bool:
     try:
         d = dt.date.fromisoformat(date_str)
@@ -172,8 +182,23 @@ def within_window(date_str: str, since_days: int) -> bool:
         return True
     return d >= (dt.date.today() - dt.timedelta(days=since_days))
 
-def normalize_title(t: str) -> str:
-    return t.strip()
+
+def normalize_text(s: str) -> str:
+    """
+    - Decodifica HTML entities
+    - Rimuove tag basilari
+    - Normalizza '×' (U+00D7) in 'x'
+    - Compatta spazi
+    """
+    try:
+        s = unescape(s or "")
+        s = re.sub(r"<[^>]+>", " ", s)
+        s = s.replace("×", "x")
+        s = re.sub(r"\s+", " ", s).strip()
+        return s
+    except Exception:
+        return s or ""
+
 
 # --------------------------
 # pipeline
@@ -187,9 +212,11 @@ def run_pipeline(cfg: Config, since_days: int) -> List[Item]:
             entries = fetch_feed(url)
         except Exception:
             entries = []
+
         for e in entries:
-            title = normalize_title(getattr(e, "title", "") or "")
-            link = getattr(e, "link", "") or ""
+            raw_title = getattr(e, "title", "") or (e.get("title") if isinstance(e, dict) else "")
+            title = normalize_text(raw_title)
+            link = getattr(e, "link", "") or (e.get("link") if isinstance(e, dict) else "")
             if not title or not link:
                 continue
 
@@ -199,12 +226,15 @@ def run_pipeline(cfg: Config, since_days: int) -> List[Item]:
             if h in cfg.domain_blocklist:
                 continue
 
-            # lingua cinese/giapponese/coreano (se richiesto)
+            # lingua CJK (se richiesto)
             if cfg.exclude_cjk and CJK_RE.search(title):
                 continue
 
-            # filtro include/exclude
-            text = title  # puoi estendere a summary se vuoi
+            # filtro include/exclude su titolo + summary
+            raw_summary = getattr(e, "summary", "") or (e.get("summary") if isinstance(e, dict) else "")
+            summary = normalize_text(raw_summary)
+            text = f"{title} {summary}".strip()
+
             if cfg.exclude_patterns and matches_any(cfg.exclude_patterns, text):
                 continue
             if cfg.include_patterns and not matches_any(cfg.include_patterns, text):
@@ -214,13 +244,22 @@ def run_pipeline(cfg: Config, since_days: int) -> List[Item]:
             if not within_window(date, since_days):
                 continue
 
+            # base score per fonte
             s = score_for_host(h)
+            # bonus score per match tecnici
+            if RES_RE.search(text):
+                s += 2
+            if NITS_RE.search(text):
+                s += 1
+            if MATTE_RE.search(text):
+                s += 1
+
             collected.append(Item(date=date, score=s, title=title, link=link, host=h))
 
-    # dedup
+    # dedup per link
     deduped = unique_by_link(collected)
 
-    # opzionale: keyword & clustering (disabilitato se le librerie non sono installate)
+    # opzionale: keywords & clustering (silenzioso se librerie non presenti)
     try:
         from keybert import KeyBERT  # type: ignore
         from sentence_transformers import SentenceTransformer  # type: ignore
@@ -238,8 +277,13 @@ def run_pipeline(cfg: Config, since_days: int) -> List[Item]:
 
         for i, it in enumerate(deduped):
             try:
-                keywords = kw_model.extract_keywords(it.title, keyphrase_ngram_range=(1, 2), stop_words='italian', top_n=3)
-                it.keywords = [k[0] for k in keywords]
+                kws = kw_model.extract_keywords(
+                    it.title,
+                    keyphrase_ngram_range=(1, 2),
+                    stop_words='italian',
+                    top_n=3
+                )
+                it.keywords = [k[0] for k in kws]
             except Exception:
                 it.keywords = []
             try:
@@ -253,6 +297,7 @@ def run_pipeline(cfg: Config, since_days: int) -> List[Item]:
     deduped.sort(key=lambda x: (x.score, x.date, x.title), reverse=True)
     return deduped
 
+
 # --------------------------
 # outputs
 # --------------------------
@@ -260,16 +305,16 @@ def run_pipeline(cfg: Config, since_days: int) -> List[Item]:
 def write_markdown(items: List[Item], out_path: Path) -> None:
     ensure_dir(out_path)
     # gruppi per score
-    g3 = [it for it in items if it.score == 3]
+    g3 = [it for it in items if it.score >= 4 or it.score == 3]  # includi boost che sfora 3
     g2 = [it for it in items if it.score == 2]
-    g1 = [it for it in items if it.score == 1]
+    g1 = [it for it in items if it.score <= 1]
 
     def render(group: List[Item]) -> str:
-        lines = []
+        lines: List[str] = []
         for it in group:
-            stars = "★" * it.score
+            stars = "★" * min(it.score, 5)
             lines.append(f"- {stars} **{it.date}** — [{it.title}]({it.link})")
-        return "\n".join(lines)
+        return "\n".join(lines) if lines else "_(nessuna voce)_"
 
     md = [
         "# Notebook & Windows News",
@@ -289,22 +334,22 @@ def write_markdown(items: List[Item], out_path: Path) -> None:
     ]
     out_path.write_text("\n".join(md), encoding="utf-8")
 
-def write_json(items: List[Item], out_path: Path) -> None:
-    import datetime as dt
 
+def write_json(items: List[Item], out_path: Path) -> None:
     ensure_dir(out_path)
+
     # Carica lo storico, se esiste
     if out_path.exists():
-        with open(out_path, "r", encoding="utf-8") as f:
-            try:
+        try:
+            with open(out_path, "r", encoding="utf-8") as f:
                 old_data = json.load(f)
-            except Exception:
-                old_data = []
+        except Exception:
+            old_data = []
     else:
         old_data = []
 
     # Indicizza le vecchie news per link
-    seen_links = {it["link"]: it for it in old_data}
+    seen_links: Dict[str, Dict[str, Any]] = {it["link"]: it for it in old_data if isinstance(it, dict) and "link" in it}
 
     # Aggiungi/aggiorna le news nuove
     for it in items:
@@ -313,32 +358,35 @@ def write_json(items: List[Item], out_path: Path) -> None:
             score=it.score,
             title=it.title,
             link=it.link,
-            keywords=getattr(it, 'keywords', []),
-            cluster_id=getattr(it, 'cluster_id', -1),
+            host=it.host,
+            keywords=(it.keywords or []),
+            cluster_id=(it.cluster_id if it.cluster_id is not None else -1),
         )
         seen_links[it.link] = d
 
     # Tieni solo notizie degli ultimi 12 mesi
-    def recent_only(x):
+    cutoff = dt.date.today() - dt.timedelta(days=365)
+
+    def recent_only(x: Dict[str, Any]) -> bool:
         try:
-            d = dt.date.fromisoformat(x["date"])
-            cutoff = dt.date.today() - dt.timedelta(days=365)
+            d = dt.date.fromisoformat(x.get("date", "1970-01-01"))
             return d >= cutoff
         except Exception:
             return True
 
     new_data = [x for x in seen_links.values() if recent_only(x)]
-
-    # Ordina per data (più recente prima)
-    new_data.sort(key=lambda x: x["date"], reverse=True)
+    new_data.sort(key=lambda x: x.get("date", ""), reverse=True)
 
     out_path.write_text(json.dumps(new_data, ensure_ascii=False, indent=2), encoding="utf-8")
 
+
 def write_manifest(items: List[Item], since_days: int, out_path: Path) -> None:
     ensure_dir(out_path)
-    by = {"1": 0, "2": 0, "3": 0}
+    by: Dict[str, int] = {"1": 0, "2": 0, "3": 0, "4+": 0}
     for it in items:
-        by[str(it.score)] += 1
+        key = "4+" if it.score >= 4 else str(max(min(it.score, 3), 1))
+        by[key] = by.get(key, 0) + 1
+
     manifest = {
         "mode": "LIVE",
         "since_days": since_days,
@@ -348,6 +396,7 @@ def write_manifest(items: List[Item], since_days: int, out_path: Path) -> None:
         "git_commit": short_git_sha(),
     }
     out_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
 
 # --------------------------
 # cli
@@ -359,9 +408,13 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--since-days", type=int, default=14, help="Finestra temporale (giorni)")
     ap.add_argument("--no-pdf", action="store_true", help="Ignora generazione PDF (placeholder, non usato)")
     ap.add_argument("--no-copy", action="store_true", help="Non copiare news.json nel dashboard")
-    ap.add_argument("--dashboard-path", default="notebook-dashboard/public/news.json",
-                    help="Dove copiare news.json per il browser")
+    ap.add_argument(
+        "--dashboard-path",
+        default="notebook-dashboard/public/news.json",
+        help="Dove copiare news.json per il browser",
+    )
     return ap.parse_args()
+
 
 def main() -> None:
     args = parse_args()
@@ -398,6 +451,7 @@ def main() -> None:
     # PDF non gestito (placeholder per compatibilità flag)
     if args.no_pdf:
         print("[tracker] --no-pdf: skipping PDF (not implemented)")
+
 
 if __name__ == "__main__":
     try:
