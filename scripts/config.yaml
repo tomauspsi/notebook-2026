@@ -5,42 +5,72 @@ meta:
 
 # --- COSA VOGLIO PRENDERE (ampio ma mirato)
 include_keywords:
-  # Brand/linea
+  # Brand / linea
   - "(?i)thinkpad"
   - "(?i)lenovo"
-  # Windows e feature correlate
+  - "(?i)latitude|elitebook|zbook|xps"   # altre linee business rilevanti
+
+  # Windows / OS / release
   - "(?i)windows\\s?(11|12)"
   - "(?i)major update|release|build|patch|aggiornamento"
   - "(?i)copilot\\+|copilot on windows"
   - "(?i)24h2|hudson valley"
-  # Generazioni / codici Lenovo (es. 21XX)
+
+  # Generazioni / codici
   - "(?i)gen\\s?(5|6|7)"
   - "(?i)\\b(20|21)[A-Z0-9]{2}\\b"
-  # Wireless di nuova generazione
+
+  # Wireless / reti
   - "(?i)802\\.11be|wifi\\s*7"
-  # Certificazioni (leak utili)
+
+  # Certificazioni / leak
   - "(?i)fcc|fccid"
   - "(?i)\\b3c\\b|china compulsory certification"
   - "(?i)\\bred\\b|radio equipment directive|ce mark"
 
+  # --- Display target ---
+  # Risoluzioni
+  - "(?i)\\b2560\\s*[x×]\\s*1600\\b"
+  - "(?i)\\b2560\\s*[x×]\\s*1440\\b"
+
+  # Sinonimi marketing
+  - "(?i)\\b(WQXGA|QHD\\+|2\\.5K|QHD|WQHD)\\b"
+
+  # Luminosità target
+  - "(?i)\\b(3[0-9]{2}|400)\\s*nits?\\b"
+
+  # Finitura opaca
+  - "(?i)\\b(anti-?glare|matte)\\b"
+
 # --- COSA TAGLIO (rumore, promo, categorie non notebook)
 exclude_keywords:
-  # Gaming / console / intrattenimento
+  # Gaming / intrattenimento
   - "(?i)ideapad|legion|gaming|xbox|playstation|dlc|assassin|mirage"
-  # Promo/affiliazioni/deals
+
+  # Promo / affiliazioni / deals
   - "(?i)coupon|expired|giveaway|promo|offerta|sconto"
   - "(?i)\\bdeal\\b"
   - "(?i)get .* for (just|only)\\b"
   - "(?i)license\\b"
   - "(?i)vpn\\b"
-  # Categorie consumer non notebook
+
+  # Categorie consumer non pertinenti
   - "(?i)phone|smartphone|tablet|xiaomi|huawei|oppo|vivo|oneplus|iphone|galaxy\\s?s\\d+"
   - "(?i)earbud|headset|speaker|tv|projector|camera|drone|washing|fridge|appliance"
   - "(?i)router\\b|smart home|iot\\b"
-  # Rumore generico/social
+
+  # Rumore generico / social
   - "(?i)shitpost|meme|random|cat"
 
-# --- FONTI (teniamo FCC; rimuovo feed cinesi rumorosi)
+  # Risoluzioni da escludere
+  - "(?i)\\b1920\\s*[x×]\\s*1080\\b|\\b1920\\s*[x×]\\s*1200\\b"  # FHD / FHD+
+  - "(?i)\\b3840\\s*[x×]\\s*2400\\b|\\b3840\\s*[x×]\\s*2160\\b|\\b4K\\b|UHD\\+?"  # 4K/UHD
+
+  # Pannelli o feature non volute
+  - "(?i)\\bOLED\\b|\\bAMOLED\\b|\\bglossy\\b"
+  - "(?i)RTX|GeForce|Radeon\\s*RX"
+
+# --- FONTI AFFIDABILI
 news_sources:
   - url: "https://www.notebookcheck.net/rss/news.xml"
   - url: "https://news.lenovo.com/feed/"
@@ -50,16 +80,20 @@ news_sources:
   - url: "https://techreport.com/feed/"
   - url: "https://slashdot.org/rss/slashdotMain"
   - url: "https://laptopmedia.com/feed/"
-  # leak/certificazioni utili:
+  # Certificazioni FCC / leak
   - url: "https://fccid.io/feed"
-  # rimossi:
-  # - url: "https://www.ithome.com/rss/"
-  # - url: "https://rss.mydrivers.com/rss.aspx?Tid=1"
+  # Extra affidabili
+  - url: "https://www.dell.com/en-us/blog/feed/"
+  - url: "https://press.hp.com/us/en/rss.html"
+  - url: "https://www.theverge.com/rss/index.xml"
+  - url: "https://www.anandtech.com/rss/"
+  - url: "https://www.pcmag.com/feeds/all"
+  - url: "https://feeds.arstechnica.com/arstechnica/index/"
 
-# --- Blocchi di sicurezza (se qualcosa filtra)
+# --- Blocchi di sicurezza
 domain_blocklist:
   - "ithome.com"
   - "mydrivers.com"
 
-# Escludi automaticamente titoli con molti caratteri CJK
+# Escludi automaticamente titoli con caratteri CJK
 exclude_cjk: true
